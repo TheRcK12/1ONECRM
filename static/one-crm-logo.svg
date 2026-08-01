@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title desc">
+  <title id="title">ONE CRM</title>
+  <desc id="desc">Símbolo geométrico do ONE CRM</desc>
+  <defs>
+    <linearGradient id="g" x1="6" y1="6" x2="58" y2="58" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#2CE9E8"/>
+      <stop offset="1" stop-color="#3978F6"/>
+    </linearGradient>
+  </defs>
+  <rect x="4" y="4" width="56" height="56" rx="17" fill="url(#g)"/>
+  <circle cx="32" cy="32" r="16" fill="none" stroke="#F4FFFF" stroke-width="4.5" opacity=".96"/>
+  <path d="M32 20.5v23M27.5 25l4.5-4.5 4.5 4.5" fill="none" stroke="#07181D" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="32" cy="32" r="3" fill="#07181D"/>
+</svg>
