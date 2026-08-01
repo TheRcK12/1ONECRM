@@ -1,0 +1,15 @@
+ONE CRM 1.6 Online - Relatório de validação
+
+- Compilação Python: OK
+- Sintaxe JavaScript: OK
+- Smoke test funcional completo: OK
+- Inicialização com PORT do Railway: OK
+- Bind em 0.0.0.0: OK
+- Healthcheck /api/health: OK
+- Banco no caminho RAILWAY_VOLUME_MOUNT_PATH: OK
+- Persistência detectada pelo healthcheck: OK
+- Proteção ONE_CRM_SETUP_TOKEN: OK
+- Rejeição de token inválido: OK
+- Criação do primeiro Dono com token correto: OK
+- Encerramento por SIGTERM: OK
+- Banco real do usuário não utilizado nos testes: OK

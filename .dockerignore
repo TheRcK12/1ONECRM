@@ -1,0 +1,15 @@
+.git
+.gitignore
+__pycache__
+*.pyc
+*.pyo
+*.db
+*.db-shm
+*.db-wal
+server.pid
+logs/*.log
+data/*
+!data/.keep
+*.zip
+*.sha256.txt
+TEST_REPORT.txt
