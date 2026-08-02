@@ -29,7 +29,7 @@ from typing import Any
 from urllib.parse import parse_qs, unquote, urlparse
 
 APP_NAME = "ONE CRM"
-APP_VERSION = "1.7.0-beta.1"
+APP_VERSION = "1.7.1-beta.1"
 BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
 IS_RAILWAY = bool(

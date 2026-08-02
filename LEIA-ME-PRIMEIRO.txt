@@ -1,0 +1,22 @@
+ONE CRM 1.7.1 - CARGOS PERSONALIZADOS
+
+SUBSTITUA NO GITHUB EXATAMENTE ESTES ARQUIVOS:
+
+1. /one_crm_server.py
+2. /static/app.js
+3. /static/index.html
+4. /version.json
+5. /tests/smoke_test.py (opcional, mas recomendado)
+
+Depois faça Commit to main e Push origin.
+No Railway, aguarde o deploy do commit novo. Se não iniciar sozinho, use Deploy Latest Commit.
+
+COMO CONFIRMAR:
+- O cabeçalho deve mostrar 1.7.1-beta.1.
+- Em Administrativo > Cargos e permissões deve aparecer o botão "+ Novo cargo".
+- No GitHub, abra static/app.js e pesquise por: id="new-role"
+- No GitHub, abra one_crm_server.py e pesquise por: def api_role_create
+
+IMPORTANTE:
+Não envie a pasta ONE_CRM_1.7.1_CARGOS_CORRIGIDO para dentro do repositório.
+Abra a pasta e copie os arquivos para as posições indicadas acima, substituindo os antigos.
