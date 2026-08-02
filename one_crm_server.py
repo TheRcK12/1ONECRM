@@ -29,7 +29,7 @@ from typing import Any
 from urllib.parse import parse_qs, unquote, urlparse
 
 APP_NAME = "ONE CRM"
-APP_VERSION = "1.6.0-beta.1"
+APP_VERSION = "1.7.0-beta.1"
 BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
 IS_RAILWAY = bool(
@@ -324,15 +324,14 @@ def init_database() -> None:
     );
 
     CREATE TABLE IF NOT EXISTS roles (
-    code TEXT PRIMARY KEY,
-    name TEXT NOT NULL UNIQUE,
-    description TEXT NOT NULL DEFAULT '',
-    base_role TEXT NOT NULL
-        CHECK(base_role IN ('owner', 'manager', 'bko', 'seller')),
-    is_system INTEGER NOT NULL DEFAULT 0,
-    active INTEGER NOT NULL DEFAULT 1,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
+        code TEXT PRIMARY KEY,
+        name TEXT NOT NULL UNIQUE COLLATE NOCASE,
+        description TEXT NOT NULL DEFAULT '',
+        base_role TEXT NOT NULL CHECK(base_role IN ('owner','manager','bko','seller')),
+        is_system INTEGER NOT NULL DEFAULT 0,
+        active INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
     );
 
     CREATE TABLE IF NOT EXISTS users (
@@ -345,6 +344,7 @@ def init_database() -> None:
         theme_preference TEXT NOT NULL DEFAULT 'dark' CHECK(theme_preference IN ('dark','light')),
         password_hash TEXT NOT NULL,
         role_code TEXT NOT NULL CHECK(role_code IN ('owner','manager','bko','seller')),
+        custom_role_code TEXT,
         team_id INTEGER,
         active INTEGER NOT NULL DEFAULT 1,
         must_change_password INTEGER NOT NULL DEFAULT 0,
@@ -365,6 +365,7 @@ def init_database() -> None:
         permission_code TEXT NOT NULL,
         allowed INTEGER NOT NULL DEFAULT 1,
         PRIMARY KEY(role_code, permission_code),
+        FOREIGN KEY(role_code) REFERENCES roles(code) ON DELETE CASCADE,
         FOREIGN KEY(permission_code) REFERENCES permissions(code) ON DELETE CASCADE
     );
 
@@ -529,10 +530,12 @@ def init_database() -> None:
             "phone": "ALTER TABLE users ADD COLUMN phone TEXT",
             "bio": "ALTER TABLE users ADD COLUMN bio TEXT",
             "theme_preference": "ALTER TABLE users ADD COLUMN theme_preference TEXT NOT NULL DEFAULT 'dark'",
+            "custom_role_code": "ALTER TABLE users ADD COLUMN custom_role_code TEXT",
         }
         for column, statement in migrations.items():
             if column not in existing_columns:
                 conn.execute(statement)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_users_custom_role ON users(custom_role_code)")
     seed_database()
 
 
@@ -562,6 +565,13 @@ PERMISSIONS = [
     ("integrations.manage", "Sistema", "Administrar integrações"),
     ("export.data", "Relatórios", "Exportar dados"),
 ]
+
+SYSTEM_ROLES = {
+    "owner": ("Dono", "Acesso total e proteção administrativa", "owner"),
+    "manager": ("Gerente", "Gestão completa da operação", "manager"),
+    "bko": ("BKO", "Tratamento operacional das vendas", "bko"),
+    "seller": ("Vendedor", "Operação comercial individual", "seller"),
+}
 
 ROLE_DEFAULTS = {
     "seller": {
@@ -642,6 +652,18 @@ CATALOG_SEED: dict[str, list[tuple[str, str]]] = {
 def seed_database() -> None:
     now = utc_now()
     with db_connect() as conn:
+        for code, (name, description, base_role) in SYSTEM_ROLES.items():
+            conn.execute(
+                """INSERT OR IGNORE INTO roles
+                (code,name,description,base_role,is_system,active,created_at,updated_at)
+                VALUES(?,?,?,?,1,1,?,?)""",
+                (code, name, description, base_role, now, now),
+            )
+            conn.execute(
+                """UPDATE roles SET name=?,description=?,base_role=?,is_system=1,active=1,updated_at=?
+                WHERE code=?""",
+                (name, description, base_role, now, code),
+            )
         conn.executemany(
             "INSERT OR IGNORE INTO permissions(code,module,description) VALUES(?,?,?)",
             PERMISSIONS,
@@ -716,6 +738,13 @@ def token_hash(raw: str) -> str:
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
+def effective_role_code(user: dict[str, Any] | sqlite3.Row | None) -> str:
+    if not user:
+        return "seller"
+    getter = user.get if isinstance(user, dict) else lambda key, default=None: user[key] if key in user.keys() else default
+    return str(getter("custom_role_code") or getter("effective_role_code") or getter("role_code") or "seller")
+
+
 def get_role_permissions(role_code: str) -> set[str]:
     if role_code == "owner":
         return {code for code, _, _ in PERMISSIONS}
@@ -763,16 +792,20 @@ def get_user_by_session(raw_token: str | None) -> tuple[dict[str, Any] | None, s
         return None, None
     with db_connect() as conn:
         row = conn.execute(
-            """SELECT u.*, s.csrf_token, s.expires_at, t.name AS team_name
+            """SELECT u.*, s.csrf_token, s.expires_at, t.name AS team_name,
+                      r.name AS role_name, r.base_role AS registered_base_role
                FROM sessions s JOIN users u ON u.id=s.user_id
                LEFT JOIN teams t ON t.id=u.team_id
+               LEFT JOIN roles r ON r.code=COALESCE(u.custom_role_code,u.role_code)
                WHERE s.token_hash=? AND s.expires_at>? AND u.active=1""",
             (token_hash(raw_token), utc_now()),
         ).fetchone()
     if not row:
         return None, None
     user = dict(row)
-    user["permissions"] = sorted(get_role_permissions(user["role_code"]))
+    user["effective_role_code"] = effective_role_code(user)
+    user["role_name"] = user.get("role_name") or SYSTEM_ROLES.get(user["role_code"], (user["role_code"], "", user["role_code"]))[0]
+    user["permissions"] = sorted(get_role_permissions(user["effective_role_code"]))
     return user, user.pop("csrf_token")
 
 
@@ -1100,6 +1133,8 @@ class OneCRMHandler(BaseHTTPRequestHandler):
             return self.api_catalog_create(user)
         if method == "PUT" and path.startswith("/api/catalogs/"):
             return self.api_catalog_update(user, int(path.rsplit("/", 1)[1]))
+        if method == "POST" and path == "/api/roles":
+            return self.api_role_create(user)
         if method == "PUT" and path.startswith("/api/roles/"):
             return self.api_role_update(user, path.rsplit("/", 1)[1])
         if method == "POST" and path == "/api/backups":
@@ -1224,13 +1259,17 @@ class OneCRMHandler(BaseHTTPRequestHandler):
         return f"{COOKIE_NAME}={raw}; Path=/; Max-Age={hours * 3600}; HttpOnly; SameSite=Lax{secure}"
 
     def public_user(self, user: dict[str, Any]) -> dict[str, Any]:
+        effective = user.get("effective_role_code") or effective_role_code(user)
         return {
             "id": user["id"], "name": user["name"],
             "display_name": user.get("display_name") or user["name"],
             "email": user["email"], "phone": user.get("phone") or "",
             "bio": user.get("bio") or "",
             "theme_preference": user.get("theme_preference") or "dark",
-            "role_code": user["role_code"], "team_id": user.get("team_id"),
+            "role_code": effective,
+            "base_role": user["role_code"],
+            "role_name": user.get("role_name") or SYSTEM_ROLES.get(user["role_code"], (effective, "", user["role_code"]))[0],
+            "team_id": user.get("team_id"),
             "team_name": user.get("team_name"), "permissions": user.get("permissions", []),
             "must_change_password": bool(user.get("must_change_password")),
         }
@@ -1779,9 +1818,13 @@ class OneCRMHandler(BaseHTTPRequestHandler):
         user = self.require_permission("users.view")
         with db_connect() as conn:
             rows = conn.execute(
-                """SELECT u.id,u.name,u.email,u.role_code,u.team_id,u.active,u.must_change_password,
+                """SELECT u.id,u.name,u.email,COALESCE(u.custom_role_code,u.role_code) AS role_code,
+                    u.role_code AS base_role,r.name AS role_name,u.team_id,u.active,u.must_change_password,
                     u.last_login_at,u.created_at,t.name AS team_name
-                    FROM users u LEFT JOIN teams t ON t.id=u.team_id ORDER BY u.active DESC,u.name"""
+                    FROM users u
+                    LEFT JOIN teams t ON t.id=u.team_id
+                    LEFT JOIN roles r ON r.code=COALESCE(u.custom_role_code,u.role_code)
+                    ORDER BY u.active DESC,u.name"""
             ).fetchall()
         self.send_json(200, {"ok": True, "users": [dict(r) for r in rows]})
 
@@ -1791,32 +1834,37 @@ class OneCRMHandler(BaseHTTPRequestHandler):
         data = self.read_json()
         name = (data.get("name") or "").strip()
         email = normalize_email(data.get("email") or "")
-        role = (data.get("role_code") or "seller").strip()
+        requested_role = (data.get("role_code") or "seller").strip()
         password = data.get("password") or ""
         team_id = int(data.get("team_id")) if data.get("team_id") else None
-        if len(name) < 3 or "@" not in email or role not in {"owner", "manager", "bko", "seller"}:
-            raise ApiError(400, "Dados do usuário inválidos.")
-        if role == "owner" and actor.get("role_code") != "owner":
-            raise ApiError(403, "Somente um Dono pode nomear outro Dono.")
-        if team_id:
-            with db_connect() as check_conn:
-                if not check_conn.execute("SELECT 1 FROM teams WHERE id=? AND active=1", (team_id,)).fetchone():
-                    raise ApiError(400, "Equipe inválida ou inativa.")
-        error = validate_password(password)
-        if error:
-            raise ApiError(400, error)
-        now = utc_now()
-        try:
-            with db_connect() as conn:
+        with db_connect() as conn:
+            role_row = conn.execute(
+                "SELECT code,base_role,active FROM roles WHERE code=?",
+                (requested_role,),
+            ).fetchone()
+            if len(name) < 3 or "@" not in email or not role_row or not role_row["active"]:
+                raise ApiError(400, "Dados do usuário ou cargo inválidos.")
+            if role_row["base_role"] == "owner" and actor.get("role_code") != "owner":
+                raise ApiError(403, "Somente um Dono pode nomear outro Dono.")
+            if team_id and not conn.execute("SELECT 1 FROM teams WHERE id=? AND active=1", (team_id,)).fetchone():
+                raise ApiError(400, "Equipe inválida ou inativa.")
+            error = validate_password(password)
+            if error:
+                raise ApiError(400, error)
+            base_role = role_row["base_role"]
+            custom_role = None if requested_role == base_role else requested_role
+            now = utc_now()
+            try:
                 cur = conn.execute(
-                    """INSERT INTO users(name,email,password_hash,role_code,team_id,active,must_change_password,created_at,updated_at)
-                       VALUES(?,?,?,?,?,1,?,?,?)""",
-                    (name, email, hash_password(password), role, team_id, 1 if data.get("must_change_password", True) else 0, now, now),
+                    """INSERT INTO users(name,email,password_hash,role_code,custom_role_code,team_id,active,must_change_password,created_at,updated_at)
+                       VALUES(?,?,?,?,?,?,1,?,?,?)""",
+                    (name, email, hash_password(password), base_role, custom_role, team_id,
+                     1 if data.get("must_change_password", True) else 0, now, now),
                 )
                 user_id = cur.lastrowid
-        except sqlite3.IntegrityError:
-            raise ApiError(409, "Já existe usuário com este e-mail.")
-        audit(actor["id"], "user.create", "user", user_id, {"email": email, "role": role}, self.client_ip())
+            except sqlite3.IntegrityError:
+                raise ApiError(409, "Já existe usuário com este e-mail.")
+        audit(actor["id"], "user.create", "user", user_id, {"email": email, "role": requested_role}, self.client_ip())
         self.send_json(201, {"ok": True, "id": user_id, "message": "Usuário criado."})
 
     def api_user_update(self, actor: dict[str, Any], user_id: int) -> None:
@@ -1828,8 +1876,12 @@ class OneCRMHandler(BaseHTTPRequestHandler):
             if not target:
                 raise ApiError(404, "Usuário não encontrado.")
             updates: dict[str, Any] = {}
-            requested_role = (data.get("role_code") or target["role_code"]).strip() if "role_code" in data else target["role_code"]
-            if (target["role_code"] == "owner" or requested_role == "owner") and actor.get("role_code") != "owner":
+            current_effective = target["custom_role_code"] or target["role_code"]
+            requested_role = (data.get("role_code") or current_effective).strip() if "role_code" in data else current_effective
+            role_row = conn.execute("SELECT code,base_role,active FROM roles WHERE code=?", (requested_role,)).fetchone()
+            if not role_row or not role_row["active"]:
+                raise ApiError(400, "Cargo inválido ou inativo.")
+            if (target["role_code"] == "owner" or role_row["base_role"] == "owner") and actor.get("role_code") != "owner":
                 raise ApiError(403, "Somente um Dono pode alterar contas de Dono.")
             if "name" in data:
                 name = (data.get("name") or "").strip()
@@ -1847,10 +1899,8 @@ class OneCRMHandler(BaseHTTPRequestHandler):
                     raise ApiError(400, "Equipe inválida ou inativa.")
                 updates["team_id"] = new_team_id
             if "role_code" in data:
-                role = (data.get("role_code") or "").strip()
-                if role not in {"owner", "manager", "bko", "seller"}:
-                    raise ApiError(400, "Cargo inválido.")
-                updates["role_code"] = role
+                updates["role_code"] = role_row["base_role"]
+                updates["custom_role_code"] = None if requested_role == role_row["base_role"] else requested_role
             if "active" in data:
                 updates["active"] = 1 if bool(data.get("active")) else 0
             if "password" in data and data.get("password"):
@@ -1876,7 +1926,7 @@ class OneCRMHandler(BaseHTTPRequestHandler):
                 raise ApiError(409, "Já existe usuário com este e-mail.")
             if not resulting_active or "password_hash" in updates:
                 conn.execute("DELETE FROM sessions WHERE user_id=?", (user_id,))
-        audit(actor["id"], "user.update", "user", user_id, {"fields": list(updates)}, self.client_ip())
+        audit(actor["id"], "user.update", "user", user_id, {"fields": list(updates), "role": requested_role}, self.client_ip())
         self.send_json(200, {"ok": True, "message": "Usuário atualizado."})
 
     def api_me_get(self) -> None:
@@ -2163,38 +2213,131 @@ class OneCRMHandler(BaseHTTPRequestHandler):
         self.send_json(200, {"ok": True})
 
     def api_roles(self) -> None:
-        user = self.require_permission("roles.manage")
+        user, _, _ = self.require_user()
+        if not (has_permission(user, "roles.manage") or has_permission(user, "users.view")):
+            raise ApiError(403, "Sem permissão para visualizar cargos.")
         with db_connect() as conn:
             permissions = [dict(r) for r in conn.execute("SELECT * FROM permissions ORDER BY module,description").fetchall()]
-            rows = conn.execute("SELECT role_code,permission_code,allowed FROM role_permissions").fetchall()
-        role_map: dict[str, list[str]] = {"owner": [p["code"] for p in permissions], "manager": [], "bko": [], "seller": []}
-        for row in rows:
-            if row["allowed"]:
-                role_map.setdefault(row["role_code"], []).append(row["permission_code"])
-        self.send_json(200, {"ok": True, "permissions": permissions, "roles": role_map,
-                             "role_labels": {"owner": "Dono", "manager": "Gerente", "bko": "BKO", "seller": "Vendedor"}})
+            role_rows = [dict(r) for r in conn.execute(
+                """SELECT r.*,
+                    COALESCE((SELECT COUNT(*) FROM users u WHERE COALESCE(u.custom_role_code,u.role_code)=r.code),0) AS users_count,
+                    COALESCE((SELECT COUNT(*) FROM users u WHERE COALESCE(u.custom_role_code,u.role_code)=r.code AND u.active=1),0) AS active_users_count
+                    FROM roles r ORDER BY r.is_system DESC, r.name"""
+            ).fetchall()]
+            permission_rows = conn.execute(
+                "SELECT role_code,permission_code,allowed FROM role_permissions WHERE allowed=1"
+            ).fetchall()
+        role_map: dict[str, list[str]] = {role["code"]: [] for role in role_rows}
+        for row in permission_rows:
+            role_map.setdefault(row["role_code"], []).append(row["permission_code"])
+        all_permissions = [p["code"] for p in permissions]
+        for role in role_rows:
+            role["permissions"] = all_permissions[:] if role["code"] == "owner" else sorted(role_map.get(role["code"], []))
+            role["active"] = bool(role["active"])
+            role["is_system"] = bool(role["is_system"])
+        self.send_json(200, {"ok": True, "permissions": permissions, "roles": role_rows})
+
+    def api_role_create(self, actor: dict[str, Any]) -> None:
+        if not has_permission(actor, "roles.manage"):
+            raise ApiError(403, "Sem permissão para criar cargos.")
+        data = self.read_json()
+        name = (data.get("name") or "").strip()
+        code = (data.get("code") or "").strip().lower()
+        description = (data.get("description") or "").strip()
+        base_role = (data.get("base_role") or "").strip()
+        permission_codes = data.get("permissions")
+        if len(name) < 2:
+            raise ApiError(400, "Informe um nome de cargo válido.")
+        if not code or len(code) > 40 or not all(ch.isalnum() or ch == "_" for ch in code):
+            raise ApiError(400, "O código deve conter apenas letras, números e sublinhado.")
+        if code in SYSTEM_ROLES:
+            raise ApiError(409, "Este código é reservado para um cargo nativo.")
+        if base_role not in {"manager", "bko", "seller"}:
+            raise ApiError(400, "Selecione Gerente, BKO ou Vendedor como cargo-base.")
+        valid = {permission_code for permission_code, _, _ in PERMISSIONS}
+        with db_connect() as conn:
+            if permission_codes is None:
+                selected = get_role_permissions(base_role)
+            elif isinstance(permission_codes, list):
+                selected = {str(item) for item in permission_codes if str(item) in valid}
+            else:
+                raise ApiError(400, "Lista de permissões inválida.")
+            now = utc_now()
+            try:
+                conn.execute(
+                    """INSERT INTO roles(code,name,description,base_role,is_system,active,created_at,updated_at)
+                    VALUES(?,?,?,?,0,1,?,?)""",
+                    (code, name, description, base_role, now, now),
+                )
+                conn.executemany(
+                    "INSERT INTO role_permissions(role_code,permission_code,allowed) VALUES(?,?,1)",
+                    [(code, permission) for permission in sorted(selected)],
+                )
+            except sqlite3.IntegrityError:
+                raise ApiError(409, "Já existe um cargo com este nome ou código.")
+        audit(actor["id"], "role.create", "role", code, {"name": name, "base_role": base_role, "permissions": sorted(selected)}, self.client_ip())
+        self.send_json(201, {"ok": True, "code": code, "message": "Cargo criado."})
 
     def api_role_update(self, actor: dict[str, Any], role: str) -> None:
         if not has_permission(actor, "roles.manage"):
             raise ApiError(403, "Sem permissão para administrar cargos.")
-        if role == "owner":
-            raise ApiError(400, "O cargo Dono possui acesso total e não pode ser limitado.")
-        if role not in {"manager", "bko", "seller"}:
-            raise ApiError(404, "Cargo não encontrado.")
         data = self.read_json()
-        codes = data.get("permissions")
-        if not isinstance(codes, list):
-            raise ApiError(400, "Lista de permissões inválida.")
-        valid = {code for code, _, _ in PERMISSIONS}
-        selected = {str(code) for code in codes if str(code) in valid}
         with db_connect() as conn:
-            conn.execute("DELETE FROM role_permissions WHERE role_code=?", (role,))
-            conn.executemany(
-                "INSERT INTO role_permissions(role_code,permission_code,allowed) VALUES(?,?,1)",
-                [(role, code) for code in selected],
-            )
-        audit(actor["id"], "role.permissions_update", "role", role, {"permissions": sorted(selected)}, self.client_ip())
-        self.send_json(200, {"ok": True})
+            current = conn.execute("SELECT * FROM roles WHERE code=?", (role,)).fetchone()
+            if not current:
+                raise ApiError(404, "Cargo não encontrado.")
+            if role == "owner":
+                raise ApiError(400, "O cargo Dono possui acesso total e não pode ser alterado.")
+            updates: dict[str, Any] = {}
+            if not current["is_system"]:
+                if "name" in data:
+                    name = (data.get("name") or "").strip()
+                    if len(name) < 2:
+                        raise ApiError(400, "Nome do cargo inválido.")
+                    updates["name"] = name
+                if "description" in data:
+                    updates["description"] = (data.get("description") or "").strip()
+                if "base_role" in data:
+                    base_role = (data.get("base_role") or "").strip()
+                    if base_role not in {"manager", "bko", "seller"}:
+                        raise ApiError(400, "Cargo-base inválido.")
+                    updates["base_role"] = base_role
+                if "active" in data:
+                    active = 1 if bool(data.get("active")) else 0
+                    if not active:
+                        in_use = conn.execute(
+                            "SELECT COUNT(*) FROM users WHERE custom_role_code=?", (role,)
+                        ).fetchone()[0]
+                        if in_use:
+                            raise ApiError(400, "Transfira os usuários vinculados antes de desativar este cargo.")
+                    updates["active"] = active
+            codes = data.get("permissions")
+            valid = {code for code, _, _ in PERMISSIONS}
+            selected: set[str] | None = None
+            if codes is not None:
+                if not isinstance(codes, list):
+                    raise ApiError(400, "Lista de permissões inválida.")
+                selected = {str(code) for code in codes if str(code) in valid}
+            if updates:
+                updates["updated_at"] = utc_now()
+                assignments = ",".join(f"{key}=?" for key in updates)
+                try:
+                    conn.execute(f"UPDATE roles SET {assignments} WHERE code=?", [*updates.values(), role])
+                except sqlite3.IntegrityError:
+                    raise ApiError(409, "Já existe outro cargo com este nome.")
+                if "base_role" in updates:
+                    conn.execute("UPDATE users SET role_code=?,updated_at=? WHERE custom_role_code=?",
+                                 (updates["base_role"], utc_now(), role))
+            if selected is not None:
+                conn.execute("DELETE FROM role_permissions WHERE role_code=?", (role,))
+                conn.executemany(
+                    "INSERT INTO role_permissions(role_code,permission_code,allowed) VALUES(?,?,1)",
+                    [(role, code) for code in sorted(selected)],
+                )
+            if not updates and selected is None:
+                raise ApiError(400, "Nenhuma alteração enviada.")
+        audit(actor["id"], "role.update", "role", role, {"fields": list(updates), "permissions": sorted(selected) if selected is not None else None}, self.client_ip())
+        self.send_json(200, {"ok": True, "message": "Cargo atualizado."})
 
     # ------------------------- auditoria, backups, integrações -------------------------
     def api_audit(self, query: dict[str, list[str]]) -> None:

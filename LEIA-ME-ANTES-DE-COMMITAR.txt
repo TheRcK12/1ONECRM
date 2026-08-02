@@ -1,0 +1,26 @@
+ONE CRM 1.7 - CARGOS PERSONALIZADOS
+
+COMO APLICAR
+1. Crie um backup no ONE CRM em Administrativo > Backups.
+2. Copie o conteúdo deste pacote para a raiz do repositório 1ONECRM.
+3. Confirme a substituição dos arquivos existentes.
+4. A estrutura precisa ficar assim:
+   one_crm_server.py
+   static/app.js
+   tests/smoke_test.py
+   version.json
+   CHANGELOG.md
+5. Faça o commit e o Push para a branch main.
+6. Aguarde o Railway concluir o novo deploy.
+7. Atualize o navegador com Ctrl + F5.
+
+O BANCO EXISTENTE
+- Não apague o Volume do Railway.
+- A migração é automática.
+- O sistema cria a tabela roles e adiciona custom_role_code à tabela users quando necessário.
+
+TESTE LOCAL OPCIONAL
+python tests/smoke_test.py
+
+RESULTADO ESPERADO
+SMOKE TEST: OK

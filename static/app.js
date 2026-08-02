@@ -9,6 +9,8 @@ const state = {
   plans: [],
   users: [],
   teams: [],
+  roles: [],
+  roleData: null,
   currentSales: [],
   currentSale: null,
 };
@@ -16,7 +18,9 @@ const state = {
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
 const esc = (value) => String(value ?? '').replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
-const roleLabel = role => ({owner:'Dono',manager:'Gerente',bko:'BKO',seller:'Vendedor'}[role] || role);
+const nativeRoleLabels = {owner:'Dono',manager:'Gerente',bko:'BKO',seller:'Vendedor'};
+const roleLabel = role => state.roles.find(item=>item.code===role)?.name || nativeRoleLabels[role] || role;
+const baseRole = user => user?.base_role || state.roles.find(item=>item.code===user?.role_code)?.base_role || user?.role_code || 'seller';
 const money = value => Number(value || 0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
 const fmtDate = value => {
   if (!value) return '-';
@@ -31,7 +35,7 @@ const fmtDateTime = value => {
   return date.toLocaleString('pt-BR');
 };
 const initials = name => String(name || 'OC').split(/\s+/).slice(0,2).map(x=>x[0]).join('').toUpperCase();
-const has = permission => state.user?.role_code === 'owner' || state.user?.permissions?.includes(permission);
+const has = permission => baseRole(state.user) === 'owner' || state.user?.permissions?.includes(permission);
 const currentTheme = () => document.documentElement.dataset.theme === 'light' ? 'light' : 'dark';
 function updateThemeUi() {
   const light = currentTheme() === 'light';
@@ -253,7 +257,7 @@ function setPage(title, eyebrow='ONE CRM') {
 }
 
 const salesNavigationItems = [
-  {id:'sales',label:'Todas as vendas',icon:'▤',test:()=>has('sales.own')||has('sales.all')||state.user?.role_code==='bko'},
+  {id:'sales',label:'Todas as vendas',icon:'▤',test:()=>has('sales.own')||has('sales.all')||baseRole(state.user)==='bko'},
   {id:'new-sale',label:'Nova venda',icon:'＋',permission:'sales.create'},
   {id:'bko',label:'Gestão BKO',icon:'◎',permission:'workflow.bko'},
 ];
@@ -475,7 +479,7 @@ function refreshUserUi() {
   if (!state.user) return;
   const visibleName = state.user.display_name || state.user.name;
   $('#user-name').textContent = visibleName;
-  $('#user-role').textContent = roleLabel(state.user.role_code);
+  $('#user-role').textContent = state.user.role_name || roleLabel(state.user.role_code);
   $('#user-initials').textContent = initials(visibleName);
 }
 
@@ -622,7 +626,7 @@ async function renderSales(params = new URLSearchParams()) {
 }
 
 function saleFormHtml(sale={}) {
-  const sellers = state.users.filter(u=>u.active && ['seller','manager','owner'].includes(u.role_code));
+  const sellers = state.users.filter(u=>u.active && ['seller','manager','owner'].includes(baseRole(u)));
   const personType = sale.person_type || 'CPF';
   return `<form id="sale-form" class="sale-wizard" novalidate>
     <nav class="wizard-steps" aria-label="Etapas da venda">
@@ -885,7 +889,7 @@ function historyTitle(h) {
 }
 
 function openWorkflowForm(sale) {
-  const bkos = state.users.filter(u=>u.active && ['bko','manager','owner'].includes(u.role_code));
+  const bkos = state.users.filter(u=>u.active && ['bko','manager','owner'].includes(baseRole(u)));
   modal(`Tratamento da venda #${sale.id}`,`<form id="workflow-form" class="form-grid">
     <div class="form-section">Responsabilidade</div>
     ${has('workflow.assign')?`<label>Responsável BKO<select name="bko_user_id">${optionList(bkos,sale.bko_user_id,'Não atribuído')}</select></label>`:''}
@@ -976,22 +980,32 @@ async function renderPowerBI() {
   $('#content').innerHTML=`<div class="page-head"><div><h1>Painel Power BI</h1><p class="muted">Conteúdo fornecido pelo endereço configurado pelo Dono.</p></div><a class="btn" href="${esc(data.embed_url)}" target="_blank" rel="noopener">Abrir em nova guia</a></div><section class="panel" style="height:calc(100vh - 170px);min-height:520px"><iframe title="Power BI" src="${esc(data.embed_url)}" style="width:100%;height:100%;border:0;background:#fff" allowfullscreen></iframe></section>`;
 }
 
+async function loadRoles() {
+  const data = await api('/api/roles');
+  state.roles = data.roles || [];
+  state.roleData = data;
+  return data;
+}
+
 async function renderUsers() {
   setPage('Funcionários','USUÁRIOS E ACESSOS');
-  const [u,t]=await Promise.all([api('/api/users'),api('/api/teams')]);
-  state.users=u.users;state.teams=t.teams;
+  const [u,t,r]=await Promise.all([api('/api/users'),api('/api/teams'),loadRoles()]);
+  state.users=u.users;state.teams=t.teams;state.roles=r.roles||[];
   $('#content').innerHTML=`
     <div class="page-head"><div><h1>Funcionários</h1><p class="muted">Cargos controlam o acesso no servidor, não apenas os botões.</p></div>${has('users.manage')?'<button class="btn primary" id="new-user">＋ Novo usuário</button>':''}</div>
-    <section class="panel"><div class="table-wrap"><table class="data-table"><thead><tr><th>Usuário</th><th>Cargo</th><th>Equipe</th><th>Status</th><th>Último acesso</th><th></th></tr></thead><tbody>${state.users.map(u=>`<tr><td><div class="cell-main">${esc(u.name)}</div><div class="cell-sub">${esc(u.email)}</div></td><td>${badge(roleLabel(u.role_code),u.role_code)}</td><td>${esc(u.team_name||'-')}</td><td>${u.active?badge('Ativo','ok'):badge('Bloqueado','cancelada')}</td><td>${fmtDateTime(u.last_login_at)}</td><td>${has('users.manage')?`<button class="btn small" onclick="openUserForm(${u.id})">Editar</button>`:''}</td></tr>`).join('')}</tbody></table></div></section>`;
+    <section class="panel"><div class="table-wrap"><table class="data-table"><thead><tr><th>Usuário</th><th>Cargo</th><th>Equipe</th><th>Status</th><th>Último acesso</th><th></th></tr></thead><tbody>${state.users.map(u=>`<tr><td><div class="cell-main">${esc(u.name)}</div><div class="cell-sub">${esc(u.email)}</div></td><td>${badge(u.role_name||roleLabel(u.role_code),u.base_role||u.role_code)}</td><td>${esc(u.team_name||'-')}</td><td>${u.active?badge('Ativo','ok'):badge('Bloqueado','cancelada')}</td><td>${fmtDateTime(u.last_login_at)}</td><td>${has('users.manage')?`<button class="btn small" onclick="openUserForm(${u.id})">Editar</button>`:''}</td></tr>`).join('')}</tbody></table></div></section>`;
   $('#new-user')?.addEventListener('click',()=>openUserForm());
 }
 
 function openUserForm(id=null) {
   const user=id?state.users.find(x=>x.id===id):{};
+  const roleOptions=state.roles
+    .filter(role=>role.active || role.code===user?.role_code)
+    .map(role=>`<option value="${esc(role.code)}" ${user?.role_code===role.code?'selected':''}>${esc(role.name)}${role.active?'':' (inativo)'}</option>`).join('');
   modal(id?'Editar usuário':'Novo usuário',`<form id="user-form" class="form-grid">
     <label>Nome<input name="name" required value="${esc(user?.name||'')}"></label>
     <label>E-mail<input type="email" name="email" required value="${esc(user?.email||'')}"></label>
-    <label>Cargo<select name="role_code"><option value="seller" ${user?.role_code==='seller'?'selected':''}>Vendedor</option><option value="bko" ${user?.role_code==='bko'?'selected':''}>BKO</option><option value="manager" ${user?.role_code==='manager'?'selected':''}>Gerente</option><option value="owner" ${user?.role_code==='owner'?'selected':''}>Dono</option></select></label>
+    <label>Cargo<select name="role_code" required>${roleOptions}</select></label>
     <label>Equipe<select name="team_id">${optionList(state.teams,user?.team_id,'Sem equipe')}</select></label>
     <label>${id?'Nova senha (opcional)':'Senha inicial'}<input type="password" name="password" ${id?'':'required'} minlength="8"></label>
     <label class="switch-row">Exigir troca de senha<input type="checkbox" name="must_change_password" ${id?'':'checked'}></label>
@@ -1014,7 +1028,7 @@ async function renderTeams() {
 
 function openTeamForm(id=null) {
   const team=id?state.teams.find(x=>x.id===id):{};
-  const managers=state.users.filter(u=>u.active&&['manager','owner'].includes(u.role_code));
+  const managers=state.users.filter(u=>u.active&&['manager','owner'].includes(baseRole(u)));
   modal(id?'Editar equipe':'Nova equipe',`<form id="team-form" class="form-grid">
     <label>Nome<input name="name" required value="${esc(team?.name||'')}"></label>
     <label>Gerente<select name="manager_id">${optionList(managers,team?.manager_id,'Sem gerente')}</select></label>
@@ -1078,17 +1092,79 @@ function openCatalogForm(id=null,category='') {
   $('#catalog-form').addEventListener('submit',async e=>{e.preventDefault();try{const payload=formObject(e.currentTarget);if(id)delete payload.category;await api(id?`/api/catalogs/${id}`:'/api/catalogs',{method:id?'PUT':'POST',body:payload});closeModal();state.catalogs={};toast('Catálogo salvo.');renderCatalogs();}catch(error){toast(error.message,'error');}});
 }
 
+function permissionModules(data=state.roleData) {
+  const modules={};
+  (data?.permissions||[]).forEach(permission=>(modules[permission.module]??=[]).push(permission));
+  return modules;
+}
+
+function rolePermissionsMarkup(role, modules, prefix='role') {
+  const selected=new Set(role?.permissions||[]);
+  return Object.entries(modules).map(([module,permissions])=>`<div class="permission-module"><h4>${esc(module)}</h4><div class="check-list">${permissions.map(permission=>`<label class="check-item"><input type="checkbox" value="${esc(permission.code)}" ${selected.has(permission.code)?'checked':''}><span>${esc(permission.description)}</span></label>`).join('')}</div></div>`).join('');
+}
+
 async function renderRoles() {
   setPage('Cargos e permissões','CONTROLE DE ACESSO');
-  const data=await api('/api/roles');
-  const modules={};data.permissions.forEach(p=>(modules[p.module]??=[]).push(p));
+  const data=await loadRoles();
+  const modules=permissionModules(data);
+  const editableRoles=data.roles.filter(role=>role.code!=='owner');
   $('#content').innerHTML=`
-    <div class="page-head"><div><h1>Matriz de permissões</h1><p class="muted">O Dono sempre possui acesso total. Os demais cargos podem ser ajustados aqui.</p></div></div>
-    <div class="grid-3">${['manager','bko','seller'].map(role=>`<section class="panel"><header class="panel-head"><h3>${data.role_labels[role]}</h3><button class="btn small primary" onclick="saveRole('${role}')">Salvar</button></header><div class="panel-body permission-grid" data-role-box="${role}">${Object.entries(modules).map(([module,perms])=>`<div class="permission-module"><h4>${esc(module)}</h4><div class="check-list">${perms.map(p=>`<label class="check-item"><input type="checkbox" value="${esc(p.code)}" ${data.roles[role]?.includes(p.code)?'checked':''}><span>${esc(p.description)}</span></label>`).join('')}</div></div>`).join('')}</div></section>`).join('')}</div>`;
+    <div class="page-head"><div><h1>Cargos e permissões</h1><p class="muted">Crie cargos próprios e escolha exatamente o que cada grupo pode acessar. O Dono continua com acesso total.</p></div><button class="btn primary" id="new-role">＋ Novo cargo</button></div>
+    <div class="grid-2">${editableRoles.map(role=>`<section class="panel"><header class="panel-head"><div><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><h3>${esc(role.name)}</h3>${role.is_system?badge('Nativo','cyan'):badge('Personalizado','green')}${role.active?badge('Ativo','ok'):badge('Inativo','cancelada')}</div><p class="muted" style="margin-top:6px">${esc(role.description||'Sem descrição')} · Base: ${esc(nativeRoleLabels[role.base_role]||role.base_role)} · ${role.users_count||0} usuário(s)</p></div><div class="actions">${!role.is_system?`<button class="btn small" onclick="openRoleForm('${esc(role.code)}')">Editar</button>`:''}<button class="btn small primary" onclick="saveRole('${esc(role.code)}')">Salvar permissões</button></div></header><div class="panel-body permission-grid" data-role-box="${esc(role.code)}">${rolePermissionsMarkup(role,modules)}</div></section>`).join('')}</div>`;
+  $('#new-role').addEventListener('click',()=>openRoleForm());
 }
+
 async function saveRole(role){
   const permissions=$$(`[data-role-box="${role}"] input:checked`).map(x=>x.value);
-  try{await api(`/api/roles/${role}`,{method:'PUT',body:{permissions}});toast(`Permissões de ${roleLabel(role)} atualizadas.`);}catch(error){toast(error.message,'error');}
+  try{await api(`/api/roles/${encodeURIComponent(role)}`,{method:'PUT',body:{permissions}});toast(`Permissões de ${roleLabel(role)} atualizadas.`);await loadRoles();}catch(error){toast(error.message,'error');}
+}
+
+function slugRoleCode(value){
+  return String(value||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'').slice(0,40);
+}
+
+function openRoleForm(code=null){
+  const data=state.roleData;
+  if(!data){toast('Carregue a página de cargos novamente.','error');return;}
+  const role=code?state.roles.find(item=>item.code===code):null;
+  if(role?.is_system){toast('Cargos nativos permitem alterar somente as permissões.','error');return;}
+  const modules=permissionModules(data);
+  const baseCode=role?.base_role||'seller';
+  const baseTemplate=state.roles.find(item=>item.code===baseCode);
+  const formRole=role||{permissions:baseTemplate?.permissions||[]};
+  modal(role?'Editar cargo':'Novo cargo',`<form id="role-form" class="form-grid">
+    <label>Nome do cargo<input name="name" required minlength="2" value="${esc(role?.name||'')}" placeholder="Ex.: Supervisor"></label>
+    <label>Código interno<input name="code" required pattern="[a-z0-9_]+" value="${esc(role?.code||'')}" ${role?'readonly':''} placeholder="supervisor"></label>
+    <label>Cargo-base<select name="base_role" required><option value="seller" ${baseCode==='seller'?'selected':''}>Vendedor</option><option value="bko" ${baseCode==='bko'?'selected':''}>BKO</option><option value="manager" ${baseCode==='manager'?'selected':''}>Gerente</option></select></label>
+    ${role?`<label class="switch-row">Cargo ativo<input type="checkbox" name="active" ${role.active?'checked':''}></label>`:''}
+    <label class="full">Descrição<textarea name="description" placeholder="Responsabilidade e objetivo do cargo">${esc(role?.description||'')}</textarea></label>
+    <div class="form-section full">Permissões</div>
+    <div class="full permission-grid" data-role-form-permissions>${rolePermissionsMarkup(formRole,modules,'form')}</div>
+    <div class="full page-actions" style="justify-content:flex-end"><button type="button" class="btn ghost" data-close-modal>Cancelar</button><button class="btn primary">${role?'Salvar cargo':'Criar cargo'}</button></div>
+  </form>`,{wide:true});
+  $$('[data-close-modal]').forEach(el=>el.addEventListener('click',closeModal));
+  const form=$('#role-form');
+  const nameInput=form.elements.name;
+  const codeInput=form.elements.code;
+  if(!role){
+    nameInput.addEventListener('input',()=>{if(!codeInput.dataset.manual)codeInput.value=slugRoleCode(nameInput.value);});
+    codeInput.addEventListener('input',()=>{codeInput.dataset.manual='1';codeInput.value=slugRoleCode(codeInput.value);});
+    form.elements.base_role.addEventListener('change',()=>{
+      const template=state.roles.find(item=>item.code===form.elements.base_role.value);
+      const allowed=new Set(template?.permissions||[]);
+      $$('[data-role-form-permissions] input[type=checkbox]').forEach(input=>input.checked=allowed.has(input.value));
+    });
+  }
+  form.addEventListener('submit',async event=>{
+    event.preventDefault();
+    const payload=formObject(form);
+    payload.code=slugRoleCode(payload.code);
+    payload.permissions=$$('[data-role-form-permissions] input:checked').map(input=>input.value);
+    try{
+      await api(role?`/api/roles/${encodeURIComponent(role.code)}`:'/api/roles',{method:role?'PUT':'POST',body:payload});
+      closeModal();toast(role?'Cargo atualizado.':'Cargo criado.');await renderRoles();
+    }catch(error){toast(error.message,'error');}
+  });
 }
 
 async function renderAudit() {
@@ -1135,7 +1211,7 @@ async function renderAccount() {
   $('#content').innerHTML=`
     <section class="profile-hero">
       <span class="profile-avatar">${esc(initials(u.display_name || u.name))}</span>
-      <div><p class="eyebrow">PERFIL PESSOAL</p><h1>${esc(u.display_name || u.name)}</h1><p>${esc(u.email)} · ${roleLabel(u.role_code)}${u.team_name?` · ${esc(u.team_name)}`:''}</p></div>
+      <div><p class="eyebrow">PERFIL PESSOAL</p><h1>${esc(u.display_name || u.name)}</h1><p>${esc(u.email)} · ${esc(u.role_name||roleLabel(u.role_code))}${u.team_name?` · ${esc(u.team_name)}`:''}</p></div>
     </section>
     <div class="profile-grid">
       <section class="panel profile-main"><header class="panel-head"><div><h3>Informações pessoais</h3><small class="muted">Você pode manter seus dados atualizados sem depender do Dono.</small></div></header><div class="panel-body">
@@ -1154,7 +1230,7 @@ async function renderAccount() {
           <button class="theme-card ${currentTheme()==='dark'?'active':''}" data-theme-choice="dark" type="button"><span>☾</span><strong>Escuro</strong><small>Menos brilho, mais foco</small></button>
           <button class="theme-card ${currentTheme()==='light'?'active':''}" data-theme-choice="light" type="button"><span>☀</span><strong>Claro</strong><small>Melhor em ambientes iluminados</small></button>
         </div></div></section>
-        <section class="panel"><header class="panel-head"><h3>Dados de acesso</h3></header><div class="panel-body"><div class="metric-row"><span>Cargo</span><strong>${roleLabel(u.role_code)}</strong></div><div class="metric-row"><span>Equipe</span><strong>${esc(u.team_name||'-')}</strong></div><div class="metric-row"><span>Permissões</span><strong>${u.permissions.length}</strong></div></div></section>
+        <section class="panel"><header class="panel-head"><h3>Dados de acesso</h3></header><div class="panel-body"><div class="metric-row"><span>Cargo</span><strong>${esc(u.role_name||roleLabel(u.role_code))}</strong></div><div class="metric-row"><span>Equipe</span><strong>${esc(u.team_name||'-')}</strong></div><div class="metric-row"><span>Permissões</span><strong>${u.permissions.length}</strong></div></div></section>
         <section class="panel"><header class="panel-head"><h3>Alterar senha</h3></header><div class="panel-body"><form id="password-form" class="form-stack"><label>Senha atual<input type="password" name="current_password" required autocomplete="current-password"></label><label>Nova senha<input type="password" name="new_password" required minlength="8" autocomplete="new-password"></label><button class="btn primary">Alterar senha</button></form></div></section>
       </div>
     </div>`;
@@ -1184,5 +1260,5 @@ async function renderAccount() {
   $('#password-form').addEventListener('submit',async e=>{e.preventDefault();try{const r=await api('/api/me/password',{method:'PUT',body:formObject(e.currentTarget)});toast(r.message);setTimeout(()=>location.reload(),1200);}catch(error){toast(error.message,'error');}});
 }
 
-Object.assign(window,{navigate,openSaleDetail,openUserForm,openTeamForm,openPlanForm,openCatalogForm,saveRole,renderRoute});
+Object.assign(window,{navigate,openSaleDetail,openUserForm,openTeamForm,openPlanForm,openCatalogForm,openRoleForm,saveRole,renderRoute});
 boot();

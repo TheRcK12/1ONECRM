@@ -1,6 +1,6 @@
 {
   "name": "ONE CRM",
-  "version": "1.6.0-beta.1",
+  "version": "1.7.0-beta.1",
   "channel": "beta-online",
-  "description": "Versão preparada para Railway com Docker, PORT dinâmico, Volume persistente, healthcheck e proteção da configuração inicial"
+  "description": "Cargos personalizados com permissões, herança operacional e compatibilidade com Railway"
 }

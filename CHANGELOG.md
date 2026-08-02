@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.7.0-beta.1 · Cargos dinâmicos
+
+- Dono pode criar cargos personalizados dentro do ONE CRM.
+- Cada cargo possui nome, código, descrição, cargo-base, status e permissões próprias.
+- Cargos personalizados podem herdar o comportamento operacional de Gerente, BKO ou Vendedor.
+- Usuários podem ser vinculados aos novos cargos pela tela Funcionários.
+- Permissões são aplicadas no servidor e atualizadas sem alterar arquivos.
+- Cargos nativos permanecem protegidos e o Dono continua com acesso total.
+- Migração automática adiciona a coluna necessária ao banco já existente no Railway.
+- Incluídos testes de criação, edição, vinculação e autenticação com cargo personalizado.
+
 ## 1.6.0-beta.1 · Online / Railway
 
 - Adicionado Dockerfile e configuração `railway.json`.
