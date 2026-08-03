@@ -63,3 +63,26 @@ A hospedagem online não usa os arquivos `.bat`.
 ## Banco
 
 Esta versão usa SQLite e deve permanecer com uma única réplica. Para uso de produção com maior concorrência e escalabilidade horizontal, migre o banco para PostgreSQL.
+
+## ONE Intelligence com OpenAI
+
+A versão 1.8 adiciona um assistente operacional conectado à Responses API da OpenAI.
+
+Configuração online no Railway:
+
+```text
+OPENAI_API_KEY=sk-proj-...
+OPENAI_MODEL=gpt-5.6-luna
+ONE_CRM_AI_ENABLED=1
+```
+
+A chave não deve ser adicionada ao GitHub. Consulte `CONFIGURAR_OPENAI_RAILWAY.md` para o procedimento completo.
+
+Principais proteções:
+
+- permissão `ai.use` configurável por cargo;
+- escopo de vendas respeitado no backend;
+- remoção de CPF, telefone, e-mail e endereço completo do contexto;
+- limite de requisições por usuário;
+- auditoria e metadados de consumo sem salvar a conversa completa;
+- IA somente de leitura, sem alteração automática de vendas ou usuários.

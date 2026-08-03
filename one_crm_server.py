@@ -8,6 +8,7 @@ import io
 import json
 import mimetypes
 import os
+import re
 import secrets
 import shutil
 import signal
@@ -28,8 +29,18 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, unquote, urlparse
 
+from one_crm_ai import (
+    OpenAIAuthenticationError,
+    OpenAIConfigurationError,
+    OpenAIConnectionError,
+    OpenAIRateLimitError,
+    create_openai_response,
+    public_openai_status,
+    test_openai_connection,
+)
+
 APP_NAME = "ONE CRM"
-APP_VERSION = "1.7.1-beta.1"
+APP_VERSION = "1.8.0-beta.1"
 BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
 IS_RAILWAY = bool(
@@ -76,6 +87,10 @@ DATA_DIR.mkdir(parents=True, exist_ok=True)
 BACKUP_DIR.mkdir(parents=True, exist_ok=True)
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 LOG_LOCK = threading.Lock()
+AI_RATE_LOCK = threading.Lock()
+AI_RATE_BUCKETS: dict[int, list[float]] = {}
+AI_RATE_LIMIT = max(1, int(os.getenv("ONE_CRM_AI_RATE_LIMIT", "10")))
+AI_RATE_WINDOW_SECONDS = max(10, int(os.getenv("ONE_CRM_AI_RATE_WINDOW_SECONDS", "60")))
 
 
 # ------------------------- utilidades -------------------------
@@ -94,6 +109,18 @@ def normalize_email(value: str) -> str:
 
 def only_digits(value: str) -> str:
     return "".join(ch for ch in (value or "") if ch.isdigit())
+
+
+def redact_ai_text(value: Any, max_length: int = 800) -> str:
+    """Remove identificadores óbvios antes de incluir texto livre no contexto da IA."""
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    text = re.sub(r"[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}", "[e-mail omitido]", text)
+    text = re.sub(r"(?<!\d)(?:\+?55\s*)?(?:\(?\d{2}\)?[\s.-]*)?9?\d{4}[\s.-]*\d{4}(?!\d)", "[telefone omitido]", text)
+    text = re.sub(r"(?<!\d)\d{3}[.\s-]?\d{3}[.\s-]?\d{3}[-\s]?\d{2}(?!\d)", "[documento omitido]", text)
+    text = re.sub(r"(?<!\d)\d{2}[.\s-]?\d{3}[.\s-]?\d{3}[\/\s-]?\d{4}[-\s]?\d{2}(?!\d)", "[documento omitido]", text)
+    return text[:max_length]
 
 
 BRAZILIAN_DDDS = {
@@ -520,6 +547,24 @@ def init_database() -> None:
         updated_at TEXT NOT NULL,
         FOREIGN KEY(updated_by) REFERENCES users(id) ON DELETE SET NULL
     );
+
+    CREATE TABLE IF NOT EXISTS ai_usage_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER,
+        sale_id INTEGER,
+        response_id TEXT,
+        model TEXT,
+        question_length INTEGER NOT NULL DEFAULT 0,
+        input_tokens INTEGER NOT NULL DEFAULT 0,
+        output_tokens INTEGER NOT NULL DEFAULT 0,
+        status TEXT NOT NULL,
+        error_code TEXT,
+        created_at TEXT NOT NULL,
+        FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE SET NULL,
+        FOREIGN KEY(sale_id) REFERENCES sales(id) ON DELETE SET NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_ai_usage_user_created ON ai_usage_logs(user_id,created_at);
     """
     with db_connect() as conn:
         conn.executescript(schema)
@@ -560,6 +605,7 @@ PERMISSIONS = [
     ("roles.manage", "Segurança", "Administrar permissões dos cargos"),
     ("audit.view", "Auditoria", "Visualizar logs de auditoria"),
     ("intelligence.view", "Inteligência", "Visualizar inteligência operacional"),
+    ("ai.use", "Inteligência", "Utilizar o assistente ONE Intelligence com OpenAI"),
     ("powerbi.view", "Relatórios", "Visualizar o painel Power BI"),
     ("backups.manage", "Sistema", "Criar e listar backups"),
     ("integrations.manage", "Sistema", "Administrar integrações"),
@@ -583,7 +629,7 @@ ROLE_DEFAULTS = {
     "manager": {
         "dashboard.view", "sales.all", "sales.create", "sales.edit_all",
         "workflow.bko", "workflow.assign", "ranking.all", "daily.view",
-        "users.view", "teams.view", "intelligence.view", "powerbi.view", "export.data"
+        "users.view", "teams.view", "intelligence.view", "ai.use", "powerbi.view", "export.data"
     },
 }
 
@@ -1059,6 +1105,8 @@ class OneCRMHandler(BaseHTTPRequestHandler):
             return self.api_daily_analysis(query)
         if path == "/api/intelligence":
             return self.api_intelligence()
+        if path == "/api/ai/status":
+            return self.api_ai_status()
         if path == "/api/users":
             return self.api_users_list()
         if path == "/api/teams":
@@ -1109,6 +1157,10 @@ class OneCRMHandler(BaseHTTPRequestHandler):
         user, csrf, _ = self.require_user()
         self.check_csrf(csrf)
 
+        if method == "POST" and path == "/api/ai/ask":
+            return self.api_ai_ask(user)
+        if method == "POST" and path == "/api/ai/test":
+            return self.api_ai_test(user)
         if method == "POST" and path == "/api/sales":
             return self.api_sale_create(user)
         if method == "PUT" and path.startswith("/api/sales/"):
@@ -1384,12 +1436,14 @@ class OneCRMHandler(BaseHTTPRequestHandler):
         user = self.require_permission("intelligence.view")
         today = date.today()
         insights: list[dict[str, Any]] = []
+        where, params = sale_scope_sql(user)
         with db_connect() as conn:
             pending = conn.execute(
-                """SELECT s.id,s.client_name,s.created_at,u.name AS seller_name
+                f"""SELECT s.id,s.client_name,s.created_at,u.name AS seller_name
                    FROM sales s JOIN users u ON u.id=s.seller_id
-                   WHERE s.status NOT IN ('instalada','cancelada')
-                   ORDER BY s.created_at ASC"""
+                   WHERE {where} AND s.status NOT IN ('instalada','cancelada')
+                   ORDER BY s.created_at ASC""",
+                params,
             ).fetchall()
             for row in pending:
                 try:
@@ -1400,24 +1454,28 @@ class OneCRMHandler(BaseHTTPRequestHandler):
                     insights.append({"severity": "warning", "title": f"Venda #{row['id']} parada há {age} dias",
                                      "description": f"{row['client_name']} · vendedor {row['seller_name']}", "sale_id": row["id"]})
             late = conn.execute(
-                """SELECT id,client_name,appointment_date FROM sales
-                   WHERE appointment_date IS NOT NULL AND appointment_date<?
-                   AND installation_status NOT IN ('instalado','instalado_regra_pdv')""",
-                (local_today(),),
+                f"""SELECT s.id,s.client_name,s.appointment_date FROM sales s
+                   WHERE {where} AND s.appointment_date IS NOT NULL AND s.appointment_date<?
+                   AND s.installation_status NOT IN ('instalado','instalado_regra_pdv')""",
+                [*params, local_today()],
             ).fetchall()
             for row in late:
                 insights.append({"severity": "danger", "title": f"Agendamento atrasado na venda #{row['id']}",
                                  "description": f"{row['client_name']} estava agendado para {row['appointment_date']}", "sale_id": row["id"]})
             bio_count = conn.execute(
-                "SELECT COUNT(*) FROM sales WHERE biometric_status IN ('biometria_pendente','prometeu_biometria','retorno_biometria')"
+                f"""SELECT COUNT(*) FROM sales s WHERE {where}
+                AND s.biometric_status IN ('biometria_pendente','prometeu_biometria','retorno_biometria')""",
+                params,
             ).fetchone()[0]
             if bio_count:
                 insights.append({"severity": "info", "title": f"{bio_count} biometria(s) ainda pendente(s)",
                                  "description": "Priorize vendas já ativadas e com instalação próxima."})
             team_rows = conn.execute(
-                """SELECT COALESCE(t.name,'Sem equipe') team_name,COUNT(s.id) total,
+                f"""SELECT COALESCE(t.name,'Sem equipe') team_name,COUNT(s.id) total,
                     SUM(CASE WHEN s.installation_status IN ('instalado','instalado_regra_pdv') THEN 1 ELSE 0 END) installed
-                    FROM sales s LEFT JOIN teams t ON t.id=s.team_id GROUP BY COALESCE(t.name,'Sem equipe')"""
+                    FROM sales s LEFT JOIN teams t ON t.id=s.team_id
+                    WHERE {where} GROUP BY COALESCE(t.name,'Sem equipe')""",
+                params,
             ).fetchall()
             for row in team_rows:
                 total = row["total"] or 0
@@ -1426,6 +1484,224 @@ class OneCRMHandler(BaseHTTPRequestHandler):
                     insights.append({"severity": "warning", "title": f"Conversão baixa em {row['team_name']}",
                                      "description": f"Conversão atual: {conversion:.1f}% em {total} vendas."})
         self.send_json(200, {"ok": True, "generated_at": utc_now(), "insights": insights[:50]})
+
+    def _openai_model_override(self) -> str:
+        with db_connect() as conn:
+            row = conn.execute("SELECT value FROM system_settings WHERE key='openai_model'").fetchone()
+        return str(row["value"] if row else "").strip()
+
+    def _check_ai_rate_limit(self, user_id: int) -> None:
+        now = time.monotonic()
+        with AI_RATE_LOCK:
+            bucket = [stamp for stamp in AI_RATE_BUCKETS.get(user_id, []) if now - stamp < AI_RATE_WINDOW_SECONDS]
+            if len(bucket) >= AI_RATE_LIMIT:
+                retry_after = max(1, int(AI_RATE_WINDOW_SECONDS - (now - bucket[0])))
+                raise ApiError(429, f"Limite temporário da IA atingido. Tente novamente em {retry_after} segundo(s).")
+            bucket.append(now)
+            AI_RATE_BUCKETS[user_id] = bucket
+
+    def _record_ai_usage(
+        self,
+        *,
+        user_id: int,
+        sale_id: int | None,
+        status: str,
+        model: str = "",
+        response_id: str = "",
+        question_length: int = 0,
+        usage: dict[str, Any] | None = None,
+        error_code: str = "",
+    ) -> None:
+        usage = usage or {}
+        try:
+            with db_connect() as conn:
+                conn.execute(
+                    """INSERT INTO ai_usage_logs
+                    (user_id,sale_id,response_id,model,question_length,input_tokens,output_tokens,status,error_code,created_at)
+                    VALUES(?,?,?,?,?,?,?,?,?,?)""",
+                    (
+                        user_id,
+                        sale_id,
+                        response_id or None,
+                        model or None,
+                        max(0, int(question_length)),
+                        max(0, int(usage.get("input_tokens") or 0)),
+                        max(0, int(usage.get("output_tokens") or 0)),
+                        status,
+                        error_code or None,
+                        utc_now(),
+                    ),
+                )
+        except Exception as exc:
+            log(f"Falha ao registrar uso da IA: {exc}")
+
+    def api_ai_status(self) -> None:
+        user, _, _ = self.require_user()
+        if not (has_permission(user, "ai.use") or has_permission(user, "integrations.manage") or has_permission(user, "intelligence.view")):
+            raise ApiError(403, "Seu cargo não possui acesso à inteligência artificial.")
+        status = public_openai_status(self._openai_model_override())
+        status.update({
+            "permission": has_permission(user, "ai.use"),
+            "rate_limit": AI_RATE_LIMIT,
+            "rate_window_seconds": AI_RATE_WINDOW_SECONDS,
+        })
+        self.send_json(200, {"ok": True, "openai": status})
+
+    def _build_ai_context(self, user: dict[str, Any], sale_id: int | None = None) -> dict[str, Any]:
+        where, params = sale_scope_sql(user)
+        today = local_today()
+        context: dict[str, Any] = {
+            "data_atual": today,
+            "usuario": {
+                "cargo": user.get("role_name") or user.get("role_code"),
+                "escopo": "todas as vendas" if has_permission(user, "sales.all") else "fila BKO" if user.get("role_code") == "bko" else "próprias vendas",
+            },
+        }
+        with db_connect() as conn:
+            base = f"FROM sales s WHERE {where}"
+            metrics = {
+                "total_vendas": conn.execute(f"SELECT COUNT(*) {base}", params).fetchone()[0],
+                "vendas_hoje": conn.execute(f"SELECT COUNT(*) {base} AND substr(s.created_at,1,10)=?", [*params, today]).fetchone()[0],
+                "instaladas": conn.execute(f"SELECT COUNT(*) {base} AND s.installation_status IN ('instalado','instalado_regra_pdv')", params).fetchone()[0],
+                "canceladas": conn.execute(f"SELECT COUNT(*) {base} AND s.status='cancelada'", params).fetchone()[0],
+                "biometrias_pendentes": conn.execute(
+                    f"SELECT COUNT(*) {base} AND s.biometric_status IN ('biometria_pendente','prometeu_biometria','retorno_biometria')",
+                    params,
+                ).fetchone()[0],
+                "agendamentos_atrasados": conn.execute(
+                    f"SELECT COUNT(*) {base} AND s.appointment_date IS NOT NULL AND s.appointment_date<? AND s.installation_status NOT IN ('instalado','instalado_regra_pdv')",
+                    [*params, today],
+                ).fetchone()[0],
+            }
+            context["indicadores"] = metrics
+            recent = conn.execute(
+                f"""SELECT s.id,s.status,s.activation_status,s.biometric_status,s.installation_status,
+                    s.appointment_date,s.created_at,COALESCE(t.name,'Sem equipe') AS team_name
+                    FROM sales s LEFT JOIN teams t ON t.id=s.team_id
+                    WHERE {where} ORDER BY s.id DESC LIMIT 12""",
+                params,
+            ).fetchall()
+            context["vendas_recentes"] = [
+                {
+                    "id": row["id"],
+                    "status": label_for("sale_status", row["status"]),
+                    "ativacao": label_for("activation_status", row["activation_status"]),
+                    "biometria": label_for("biometric_status", row["biometric_status"]),
+                    "instalacao": label_for("installation_status", row["installation_status"]),
+                    "agendamento": row["appointment_date"],
+                    "equipe": row["team_name"],
+                    "criada_em": row["created_at"],
+                }
+                for row in recent
+            ]
+            if sale_id is not None:
+                row = conn.execute(
+                    """SELECT s.*,COALESCE(t.name,'Sem equipe') AS team_name,u.name AS seller_name
+                    FROM sales s JOIN users u ON u.id=s.seller_id
+                    LEFT JOIN teams t ON t.id=s.team_id WHERE s.id=?""",
+                    (sale_id,),
+                ).fetchone()
+                if not row:
+                    raise ApiError(404, "Venda não encontrada.")
+                sale = dict(row)
+                if not can_access_sale(user, sale):
+                    raise ApiError(403, "Você não pode consultar esta venda com a IA.")
+                context["venda_especifica"] = {
+                    "id": sale["id"],
+                    "referencia_cliente": f"Cliente da venda #{sale['id']}",
+                    "plano": sale.get("plan_name_snapshot"),
+                    "valor": sale.get("plan_price_snapshot"),
+                    "operadora": sale.get("provider"),
+                    "servico": sale.get("service"),
+                    "equipe": sale.get("team_name"),
+                    "vendedor": sale.get("seller_name"),
+                    "status": label_for("sale_status", sale.get("status")),
+                    "ativacao": label_for("activation_status", sale.get("activation_status")),
+                    "biometria": label_for("biometric_status", sale.get("biometric_status")),
+                    "instalacao": label_for("installation_status", sale.get("installation_status")),
+                    "agendamento_status": label_for("appointment_status", sale.get("appointment_status")),
+                    "agendamento_data": sale.get("appointment_date"),
+                    "agendamento_periodo": label_for("period", sale.get("appointment_period")),
+                    "observacoes_sem_dados_pessoais": redact_ai_text(sale.get("notes")),
+                    "criada_em": sale.get("created_at"),
+                    "atualizada_em": sale.get("updated_at"),
+                }
+        return context
+
+    def api_ai_ask(self, user: dict[str, Any]) -> None:
+        if not has_permission(user, "ai.use"):
+            raise ApiError(403, "Seu cargo não possui permissão para usar o ONE Intelligence.")
+        self._check_ai_rate_limit(int(user["id"]))
+        data = self.read_json()
+        question = str(data.get("question") or "").strip()
+        if not question:
+            raise ApiError(400, "Digite uma pergunta.")
+        if len(question) > 2_000:
+            raise ApiError(400, "A pergunta excede o limite de 2.000 caracteres.")
+        raw_sale_id = data.get("sale_id")
+        sale_id: int | None = None
+        if raw_sale_id not in (None, ""):
+            try:
+                sale_id = int(raw_sale_id)
+            except (TypeError, ValueError):
+                raise ApiError(400, "O número da venda é inválido.")
+        context = self._build_ai_context(user, sale_id)
+        model_override = self._openai_model_override()
+        try:
+            result = create_openai_response(
+                question=question,
+                context=context,
+                model_override=model_override,
+            )
+        except ValueError as exc:
+            self._record_ai_usage(user_id=user["id"], sale_id=sale_id, status="error", question_length=len(question), error_code="validation")
+            raise ApiError(400, str(exc)) from exc
+        except OpenAIConfigurationError as exc:
+            self._record_ai_usage(user_id=user["id"], sale_id=sale_id, status="error", question_length=len(question), error_code="configuration")
+            raise ApiError(503, str(exc)) from exc
+        except OpenAIAuthenticationError as exc:
+            self._record_ai_usage(user_id=user["id"], sale_id=sale_id, status="error", question_length=len(question), error_code="authentication")
+            raise ApiError(502, str(exc)) from exc
+        except OpenAIRateLimitError as exc:
+            self._record_ai_usage(user_id=user["id"], sale_id=sale_id, status="error", question_length=len(question), error_code="openai_rate_limit")
+            raise ApiError(429, str(exc)) from exc
+        except OpenAIConnectionError as exc:
+            self._record_ai_usage(user_id=user["id"], sale_id=sale_id, status="error", question_length=len(question), error_code="connection")
+            raise ApiError(502, str(exc)) from exc
+        self._record_ai_usage(
+            user_id=user["id"],
+            sale_id=sale_id,
+            status="success",
+            model=result.get("model", ""),
+            response_id=result.get("response_id", ""),
+            question_length=len(question),
+            usage=result.get("usage") or {},
+        )
+        audit(
+            user["id"],
+            "ai.ask",
+            "sale" if sale_id else "operation",
+            sale_id,
+            {"model": result.get("model"), "response_id": result.get("response_id"), "question_length": len(question)},
+            self.client_ip(),
+        )
+        self.send_json(200, {"ok": True, **result})
+
+    def api_ai_test(self, actor: dict[str, Any]) -> None:
+        if not has_permission(actor, "integrations.manage"):
+            raise ApiError(403, "Sem permissão para testar integrações.")
+        try:
+            result = test_openai_connection(self._openai_model_override())
+        except OpenAIConfigurationError as exc:
+            raise ApiError(503, str(exc)) from exc
+        except OpenAIAuthenticationError as exc:
+            raise ApiError(502, str(exc)) from exc
+        except OpenAIRateLimitError as exc:
+            raise ApiError(429, str(exc)) from exc
+        except OpenAIConnectionError as exc:
+            raise ApiError(502, str(exc)) from exc
+        audit(actor["id"], "integration.openai.test", "integration", "openai", {"model": result.get("model")}, self.client_ip())
+        self.send_json(200, {"ok": True, "message": "Conexão com a OpenAI confirmada.", "model": result.get("model"), "response_id": result.get("response_id")})
 
     # ------------------------- vendas -------------------------
     def api_cep_lookup(self, raw_cep: str, query: dict[str, list[str]] | None = None) -> None:
@@ -2372,28 +2648,49 @@ class OneCRMHandler(BaseHTTPRequestHandler):
         "generic_webhook_url": False,
         "evolution_api_url": False,
         "evolution_api_key": True,
-        "openai_api_key": True,
         "openai_model": False,
     }
 
     def api_integrations_get(self) -> None:
-        user = self.require_permission("integrations.manage")
+        self.require_permission("integrations.manage")
         with db_connect() as conn:
-            rows = conn.execute("SELECT key,value,secret,updated_at FROM system_settings WHERE key IN (%s)" %
-                                ",".join("?" for _ in self.INTEGRATION_KEYS), tuple(self.INTEGRATION_KEYS)).fetchall()
+            rows = conn.execute(
+                "SELECT key,value,secret,updated_at FROM system_settings WHERE key IN (%s)"
+                % ",".join("?" for _ in self.INTEGRATION_KEYS),
+                tuple(self.INTEGRATION_KEYS),
+            ).fetchall()
         saved = {row["key"]: dict(row) for row in rows}
-        result = {}
+        result: dict[str, Any] = {}
         for key, secret in self.INTEGRATION_KEYS.items():
             row = saved.get(key)
             if secret:
-                result[key] = {"configured": bool(row and row["value"]), "value": "••••••••" if row and row["value"] else ""}
+                result[key] = {
+                    "configured": bool(row and row["value"]),
+                    "value": "••••••••" if row and row["value"] else "",
+                }
             else:
-                result[key] = {"configured": bool(row and row["value"]), "value": row["value"] if row else ""}
-        self.send_json(200, {"ok": True, "integrations": result,
-                             "notes": {"powerbi": "URL incorporada funcional.",
-                                       "webhook": "Eventos de venda são enviados por POST.",
-                                       "evolution": "Credenciais armazenadas; conector específico depende da versão da API.",
-                                       "openai": "Credencial armazenada; a inteligência local funciona sem API externa."}})
+                result[key] = {
+                    "configured": bool(row and row["value"]),
+                    "value": row["value"] if row else "",
+                }
+        openai_status = public_openai_status(result.get("openai_model", {}).get("value") or "")
+        result["openai"] = openai_status
+        self.send_json(
+            200,
+            {
+                "ok": True,
+                "integrations": result,
+                "notes": {
+                    "powerbi": "URL incorporada funcional.",
+                    "webhook": "Eventos de venda são enviados por POST.",
+                    "evolution": "Credenciais armazenadas; conector específico depende da versão da API.",
+                    "openai": (
+                        "Chave lida com segurança da variável OPENAI_API_KEY no Railway. "
+                        "A chave nunca é enviada ao navegador nem salva no SQLite."
+                    ),
+                },
+            },
+        )
 
     def api_powerbi_get(self) -> None:
         user = self.require_permission("powerbi.view")
@@ -2425,6 +2722,10 @@ class OneCRMHandler(BaseHTTPRequestHandler):
                     (key, value, 1 if secret else 0, actor["id"], now),
                 )
                 changed.append(key)
+        # Credenciais OpenAI antigas gravadas no SQLite deixam de ser utilizadas.
+        # O segredo deve existir apenas em OPENAI_API_KEY no ambiente do servidor.
+        with db_connect() as conn:
+            conn.execute("DELETE FROM system_settings WHERE key='openai_api_key'")
         audit(actor["id"], "integrations.update", "settings", None, {"keys": changed}, self.client_ip())
         self.send_json(200, {"ok": True, "message": "Integrações atualizadas."})
 

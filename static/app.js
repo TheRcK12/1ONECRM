@@ -13,6 +13,7 @@ const state = {
   roleData: null,
   currentSales: [],
   currentSale: null,
+  aiMessages: [],
 };
 
 const $ = (selector, root = document) => root.querySelector(selector);
@@ -962,12 +963,85 @@ async function renderRanking(params=new URLSearchParams()) {
     <section class="panel"><div class="table-wrap"><table class="data-table"><thead><tr><th>Posição</th><th>Vendedor</th><th>Equipe</th><th>Vendas</th><th>Instaladas</th><th>Canceladas</th><th>Conversão</th><th>Pontos</th></tr></thead><tbody>${data.ranking.map(r=>`<tr><td><span class="badge ${r.position<=3?'amber':'cyan'}">#${r.position}</span></td><td class="cell-main">${esc(r.name)}</td><td>${esc(r.team_name)}</td><td>${r.total}</td><td>${r.installed}</td><td>${r.cancelled}</td><td>${r.conversion}%</td><td class="cell-main">${r.points}</td></tr>`).join('')}</tbody></table></div>${!data.ranking.length?'<div class="empty">Nenhum vendedor encontrado.</div>':''}</section>`;
 }
 
+function aiText(value) {
+  return esc(value).replace(/\n/g,'<br>');
+}
+
+function renderAIMessages() {
+  const container=$('#ai-messages');
+  if(!container) return;
+  container.innerHTML=state.aiMessages.length?state.aiMessages.map(message=>`
+    <article class="ai-message ${message.role}">
+      <div class="ai-message-head"><strong>${message.role==='assistant'?'ONE Intelligence':'Você'}</strong>${message.meta?`<small>${esc(message.meta)}</small>`:''}</div>
+      <div class="ai-message-body">${aiText(message.text)}</div>
+    </article>`).join(''):'<div class="ai-empty">Faça uma pergunta operacional ou use uma das sugestões rápidas.</div>';
+  container.scrollTop=container.scrollHeight;
+}
+
+async function sendAIQuestion(questionOverride='') {
+  const form=$('#ai-form');
+  const questionInput=$('#ai-question');
+  const saleInput=$('#ai-sale-id');
+  const button=$('#ai-send');
+  const question=(questionOverride || questionInput?.value || '').trim();
+  if(!question){toast('Digite uma pergunta.','error');return;}
+  state.aiMessages.push({role:'user',text:question});
+  renderAIMessages();
+  if(questionInput) questionInput.value='';
+  if(button){button.disabled=true;button.textContent='Analisando...';}
+  try{
+    const result=await api('/api/ai/ask',{method:'POST',body:{question,sale_id:saleInput?.value||null}});
+    const usage=result.usage||{};
+    const meta=[result.model,usage.total_tokens?`${usage.total_tokens} tokens`:null].filter(Boolean).join(' · ');
+    state.aiMessages.push({role:'assistant',text:result.answer,meta});
+    renderAIMessages();
+  }catch(error){
+    state.aiMessages.push({role:'assistant',text:`Não foi possível concluir a análise: ${error.message}`});
+    renderAIMessages();
+    toast(error.message,'error');
+  }finally{
+    if(button){button.disabled=false;button.textContent='Perguntar ao ONE';}
+  }
+}
+
 async function renderIntelligence() {
-  setPage('Inteligência','ALERTAS OPERACIONAIS');
-  const data=await api('/api/intelligence');
+  setPage('Inteligência','ONE INTELLIGENCE');
+  const [local,statusResult]=await Promise.all([
+    api('/api/intelligence'),
+    api('/api/ai/status').catch(error=>({openai:{ready:false,configured:false,permission:false,error:error.message}})),
+  ]);
+  const ai=statusResult.openai||{};
+  const aiAvailable=Boolean(ai.ready && ai.permission);
+  const quickPrompts=[
+    'Resuma as principais pendências da operação e indique prioridades.',
+    'Quais riscos operacionais aparecem nos indicadores atuais?',
+    'Sugira um plano de ação curto para melhorar a conversão.',
+    'Liste os pontos que merecem acompanhamento hoje.',
+  ];
   $('#content').innerHTML=`
-    <div class="page-head"><div><h1>ONE Intelligence</h1><p class="muted">Regras locais, sem depender de API externa. Gerado em ${fmtDateTime(data.generated_at)}.</p></div><button class="btn" onclick="renderRoute()">Atualizar</button></div>
-    <section class="panel"><header class="panel-head"><h3>Alertas encontrados</h3><span class="badge cyan">${data.insights.length}</span></header><div class="panel-body">${data.insights.length?data.insights.map(i=>`<article class="insight ${i.severity}"><h4>${esc(i.title)}</h4><p>${esc(i.description)}</p>${i.sale_id?`<button class="btn small ghost" style="margin-top:10px" onclick="openSaleDetail(${i.sale_id})">Abrir venda</button>`:''}</article>`).join(''):'<div class="empty">Nenhum alerta relevante. Um raro momento de paz operacional.</div>'}</div></section>`;
+    <div class="page-head"><div><h1>ONE Intelligence</h1><p class="muted">Análise local e assistente OpenAI com acesso limitado ao escopo do seu cargo.</p></div><button class="btn" onclick="renderRoute()">Atualizar</button></div>
+    <section class="panel ai-panel">
+      <header class="panel-head"><div><h3>Assistente operacional</h3><small class="muted">${ai.ready?`Modelo ${esc(ai.model)}`:'Configuração da OpenAI pendente'}</small></div>${ai.ready?badge('OpenAI conectada','ok'):badge('OpenAI não configurada','aguard')}</header>
+      <div class="panel-body">
+        ${!ai.permission?'<div class="integration-notice warning"><strong>Seu cargo não possui a permissão “Utilizar o assistente ONE Intelligence com OpenAI”.</strong><span>O Dono pode liberar essa opção em Cargos e permissões.</span></div>':''}
+        ${ai.permission&&!ai.ready?'<div class="integration-notice warning"><strong>A chave da OpenAI ainda não foi configurada no Railway.</strong><span>Adicione OPENAI_API_KEY nas Variables do serviço e publique novamente.</span></div>':''}
+        <div class="ai-layout ${aiAvailable?'':'disabled'}">
+          <div class="ai-chat">
+            <div id="ai-messages" class="ai-messages" aria-live="polite"></div>
+            <form id="ai-form" class="ai-form">
+              <label class="ai-sale-field">Venda específica <span class="muted">(opcional)</span><input id="ai-sale-id" name="sale_id" type="number" min="1" placeholder="Ex.: 152" ${aiAvailable?'':'disabled'}></label>
+              <label class="ai-question-field">Pergunta<textarea id="ai-question" name="question" maxlength="2000" rows="4" placeholder="Ex.: Quais vendas exigem prioridade hoje?" ${aiAvailable?'':'disabled'}></textarea></label>
+              <div class="ai-form-actions"><small class="muted">A IA recebe indicadores e dados operacionais sem CPF, telefone, e-mail ou endereço completo.</small><button id="ai-send" class="btn primary" ${aiAvailable?'':'disabled'}>Perguntar ao ONE</button></div>
+            </form>
+          </div>
+          <aside class="ai-suggestions"><strong>Sugestões rápidas</strong>${quickPrompts.map((prompt,index)=>`<button type="button" class="ai-quick" data-ai-quick="${index}" ${aiAvailable?'':'disabled'}>${esc(prompt)}</button>`).join('')}</aside>
+        </div>
+      </div>
+    </section>
+    <section class="panel"><header class="panel-head"><div><h3>Alertas operacionais locais</h3><small class="muted">Gerados sem consumo da API.</small></div><span class="badge cyan">${local.insights.length}</span></header><div class="panel-body">${local.insights.length?local.insights.map(i=>`<article class="insight ${i.severity}"><h4>${esc(i.title)}</h4><p>${esc(i.description)}</p>${i.sale_id?`<button class="btn small ghost" style="margin-top:10px" onclick="openSaleDetail(${i.sale_id})">Abrir venda</button>`:''}</article>`).join(''):'<div class="empty">Nenhum alerta relevante.</div>'}</div></section>`;
+  renderAIMessages();
+  $('#ai-form')?.addEventListener('submit',e=>{e.preventDefault();sendAIQuestion();});
+  $$('[data-ai-quick]').forEach(button=>button.addEventListener('click',()=>sendAIQuestion(quickPrompts[Number(button.dataset.aiQuick)])));
 }
 
 async function renderPowerBI() {
@@ -1186,20 +1260,21 @@ async function renderBackups() {
 
 async function renderIntegrations() {
   setPage('Integrações','CONEXÕES EXTERNAS');
-  const data=await api('/api/integrations');const i=data.integrations;
+  const data=await api('/api/integrations');const i=data.integrations;const openai=i.openai||{};
   $('#content').innerHTML=`
-    <div class="page-head"><div><h1>Central de integrações</h1><p class="muted">Credenciais secretas não voltam para o navegador depois de salvas.</p></div></div>
+    <div class="page-head"><div><h1>Central de integrações</h1><p class="muted">Segredos ficam no servidor. O navegador recebe apenas o estado da configuração.</p></div></div>
     <section class="panel"><header class="panel-head"><h3>Configurações</h3></header><div class="panel-body"><form id="integrations-form" class="form-grid">
       <label class="full">Power BI Embed URL<input name="powerbi_embed_url" value="${esc(i.powerbi_embed_url.value)}" placeholder="https://app.powerbi.com/view?... "><small class="muted">URL incorporada pronta para uso em relatórios.</small></label>
       <label class="full">Webhook genérico<input name="generic_webhook_url" value="${esc(i.generic_webhook_url.value)}" placeholder="https://seu-n8n/webhook/one-crm"><small class="muted">Recebe eventos sale.created, sale.updated e sale.workflow_updated.</small></label>
       <label>Evolution API URL<input name="evolution_api_url" value="${esc(i.evolution_api_url.value)}"></label>
       <label>Evolution API Key<input name="evolution_api_key" type="password" value="${esc(i.evolution_api_key.value)}"><small class="muted">${i.evolution_api_key.configured?'Já configurada.':''}</small></label>
-      <label>OpenAI API Key<input name="openai_api_key" type="password" value="${esc(i.openai_api_key.value)}"><small class="muted">${i.openai_api_key.configured?'Já configurada.':''}</small></label>
-      <label>Modelo OpenAI<input name="openai_model" value="${esc(i.openai_model.value||'')}"></label>
-      <div class="full page-actions" style="justify-content:flex-end"><button class="btn primary">Salvar integrações</button></div>
+      <label class="full">Modelo OpenAI<input name="openai_model" value="${esc(i.openai_model.value||openai.model||'gpt-5.6-luna')}" ${openai.model_source==='environment'?'disabled':''}><small class="muted">${openai.model_source==='environment'?'Controlado pela variável OPENAI_MODEL no Railway.':'Pode ser salvo no ONE CRM quando OPENAI_MODEL não estiver definida.'}</small></label>
+      <div class="full integration-secret-box"><div><strong>Chave OpenAI</strong><p>${openai.configured?'OPENAI_API_KEY foi encontrada no ambiente do Railway.':'OPENAI_API_KEY ainda não foi configurada no Railway.'}</p><small>A chave não é salva no SQLite e nunca volta para o navegador.</small></div>${openai.configured?badge('Configurada','ok'):badge('Ausente','cancelada')}</div>
+      <div class="full page-actions integration-actions"><button type="button" class="btn" id="test-openai" ${openai.configured?'':'disabled'}>Testar OpenAI</button><button class="btn primary">Salvar integrações</button></div>
     </form></div></section>
-    <section class="panel"><header class="panel-head"><h3>Estado dos conectores</h3></header><div class="panel-body grid-2"><div class="team-card"><h4>Power BI</h4><p>${esc(data.notes.powerbi)}</p>${i.powerbi_embed_url.configured?badge('Configurado','ok'):badge('Não configurado','aguard')}</div><div class="team-card"><h4>Webhook / N8N</h4><p>${esc(data.notes.webhook)}</p>${i.generic_webhook_url.configured?badge('Configurado','ok'):badge('Não configurado','aguard')}</div><div class="team-card"><h4>Evolution API</h4><p>${esc(data.notes.evolution)}</p>${i.evolution_api_key.configured?badge('Credencial salva','ok'):badge('Pendente','aguard')}</div><div class="team-card"><h4>OpenAI</h4><p>${esc(data.notes.openai)}</p>${i.openai_api_key.configured?badge('Credencial salva','ok'):badge('Opcional','aguard')}</div></div></section>`;
-  $('#integrations-form').addEventListener('submit',async e=>{e.preventDefault();try{const payload=formObject(e.currentTarget);await api('/api/integrations',{method:'PUT',body:payload});toast('Integrações atualizadas.');renderIntegrations();}catch(error){toast(error.message,'error');}});
+    <section class="panel"><header class="panel-head"><h3>Estado dos conectores</h3></header><div class="panel-body grid-2"><div class="team-card"><h4>Power BI</h4><p>${esc(data.notes.powerbi)}</p>${i.powerbi_embed_url.configured?badge('Configurado','ok'):badge('Não configurado','aguard')}</div><div class="team-card"><h4>Webhook / N8N</h4><p>${esc(data.notes.webhook)}</p>${i.generic_webhook_url.configured?badge('Configurado','ok'):badge('Não configurado','aguard')}</div><div class="team-card"><h4>Evolution API</h4><p>${esc(data.notes.evolution)}</p>${i.evolution_api_key.configured?badge('Credencial salva','ok'):badge('Pendente','aguard')}</div><div class="team-card"><h4>OpenAI</h4><p>${esc(data.notes.openai)}</p>${openai.ready?badge(`Ativa · ${openai.model}`,'ok'):badge('Não configurada','aguard')}</div></div></section>`;
+  $('#integrations-form').addEventListener('submit',async e=>{e.preventDefault();try{const payload=formObject(e.currentTarget);delete payload.openai_api_key;await api('/api/integrations',{method:'PUT',body:payload});toast('Integrações atualizadas.');renderIntegrations();}catch(error){toast(error.message,'error');}});
+  $('#test-openai')?.addEventListener('click',async e=>{const button=e.currentTarget;button.disabled=true;button.textContent='Testando...';try{const result=await api('/api/ai/test',{method:'POST',body:{}});toast(`${result.message} Modelo: ${result.model}`);}catch(error){toast(error.message,'error');}finally{button.disabled=false;button.textContent='Testar OpenAI';}});
 }
 
 async function renderAccount() {

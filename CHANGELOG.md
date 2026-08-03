@@ -88,3 +88,17 @@
 - Adicionado tema claro e escuro.
 - Criada a área de perfil do usuário.
 - Compatibilidade com o banco legado preservada.
+
+## 1.8.0-beta.1
+
+- Integração real com a OpenAI pela Responses API.
+- Chave lida exclusivamente de `OPENAI_API_KEY` no servidor.
+- Novo módulo `one_crm_ai.py`, sem dependências externas.
+- Chat operacional na página ONE Intelligence.
+- Sugestões rápidas e contexto opcional de uma venda específica.
+- Contexto limitado pelas permissões e pelo escopo de vendas do usuário.
+- Remoção de CPF, telefone, e-mail e endereço completo do contexto da IA.
+- Nova permissão `ai.use` configurável por cargo.
+- Teste de conexão na página Integrações.
+- Limite de requisições por usuário e auditoria de uso.
+- Registro somente de metadados técnicos em `ai_usage_logs`.

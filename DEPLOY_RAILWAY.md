@@ -129,3 +129,15 @@ Você pode usar a navegação de arquivos do Volume pelo Railway CLI. Mantenha u
 ## Limitação desta versão
 
 Esta edição usa SQLite e deve operar com **uma única réplica** do serviço. Não habilite várias réplicas ou várias regiões usando o mesmo banco. Para produção maior, o próximo passo correto é migrar o banco para PostgreSQL.
+
+## OpenAI / ONE Intelligence
+
+Adicione em **Variables** do serviço:
+
+```text
+OPENAI_API_KEY=sk-proj-...
+OPENAI_MODEL=gpt-5.6-luna
+ONE_CRM_AI_ENABLED=1
+```
+
+A chave não deve ser enviada para o GitHub. Depois de aplicar as variáveis, aguarde o novo deploy e use **Administrativo → Integrações → Testar OpenAI**.

@@ -1,6 +1,6 @@
 {
   "name": "ONE CRM",
-  "version": "1.7.1-beta.1",
+  "version": "1.8.0-beta.1",
   "channel": "beta-online",
-  "description": "Cargos personalizados com permissões, herança operacional e compatibilidade com Railway"
+  "description": "ONE Intelligence integrado à OpenAI com chave segura no Railway, permissões e contexto operacional protegido"
 }
