@@ -287,7 +287,7 @@ html[data-theme="light"] .auth-footer{border-top-color:#dce7ea;color:#7c9096}
 .ai-quick{width:100%;text-align:left;border:1px solid var(--line);border-radius:11px;padding:11px 12px;background:var(--surface-2);color:var(--text);font-size:12px;line-height:1.45;transition:.18s}
 .ai-quick:hover:not(:disabled){border-color:var(--cyan);background:color-mix(in srgb,var(--cyan) 8%,var(--surface-2));transform:translateY(-1px)}
 .integration-notice{display:flex;flex-direction:column;gap:5px;margin-bottom:15px;padding:12px 14px;border:1px solid var(--line);border-radius:11px;background:var(--surface-2);font-size:12px}
-.integration-notice.warning{border-color:color-mix(in srgb,var(--amber) 45%,var(--line));background:color-mix(in srgb,var(--amber) 8%,var(--surface-2))}
+.integration-notice.warning{border-color:color-mix(in srgb,var(--amber) 45%,var(--line));background:color-mix(in srgb,var(--amber) 8%,var(--surface-2))}.integration-notice.info{border-color:color-mix(in srgb,var(--cyan) 40%,var(--line));background:color-mix(in srgb,var(--cyan) 7%,var(--surface-2))}
 .integration-notice span{color:var(--muted)}
 .integration-secret-box{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 16px;border:1px solid var(--line);border-radius:12px;background:var(--surface-2)}
 .integration-secret-box strong{display:block;margin-bottom:4px;font-size:12px}

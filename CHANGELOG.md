@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.9.0-beta.1
+
+- Adicionado GroqCloud como provedor principal de IA.
+- Adicionada seleção Automático, Groq, OpenAI ou Local.
+- Fallback local automático quando a cota externa acaba ou o provedor falha.
+- Tela de integrações agora mostra e testa cada provedor separadamente.
+- Contexto da IA inclui distribuição por UF e desempenho por equipe.
+- Logs de uso registram provedor e uso de fallback.
+- OpenAI permanece opcional.
+
+
 ## 1.7.0-beta.1 · Cargos dinâmicos
 
 - Dono pode criar cargos personalizados dentro do ONE CRM.

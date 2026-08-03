@@ -1,22 +1,12 @@
-ONE CRM 1.8.0-beta.1 - Relatório de validação
+ONE CRM 1.9.0-beta.1
 
-Aprovado:
-- Compilação Python: one_crm_server.py e one_crm_ai.py
-- Validação sintática JavaScript: static/app.js
-- Smoke test funcional completo
-- Teste de integração OpenAI com servidor simulado
-- Teste de modo online/Railway
-- Permissões de Dono, Gerente, BKO, Vendedor e cargos personalizados
-- Escopo de vendas aplicado ao contexto da IA
-- Remoção de CPF, telefone e e-mail do contexto da IA
-- Registro de metadados em ai_usage_logs
-- Endpoint de teste de conexão
-- Operação sem dependências Python externas
+Validações executadas:
+- Compilação do backend Python: OK
+- Validação sintática do JavaScript: OK
+- Smoke test funcional: OK
+- Teste de modo Railway: OK
+- Teste GroqCloud/OpenAI/fallback local: OK
+- Mascaramento de CPF, telefone e e-mail no contexto externo: OK
+- Migração de logs de IA com provider/fallback_used: OK
 
-Resultados:
-SMOKE TEST: OK
-OPENAI INTEGRATION TEST: OK
-ONLINE MODE TEST: OK
-
-Observação:
-A API real da OpenAI não foi chamada durante os testes para evitar consumo. O teste usa um servidor HTTP simulado compatível com a estrutura da Responses API.
+As chamadas de teste utilizam servidores simulados e não consomem créditos externos.

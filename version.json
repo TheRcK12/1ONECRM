@@ -1,6 +1,6 @@
 {
   "name": "ONE CRM",
-  "version": "1.8.0-beta.1",
+  "version": "1.9.0-beta.1",
   "channel": "beta-online",
-  "description": "ONE Intelligence integrado à OpenAI com chave segura no Railway, permissões e contexto operacional protegido"
+  "description": "ONE Intelligence com GroqCloud gratuito, OpenAI opcional e fallback local automático"
 }

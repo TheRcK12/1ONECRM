@@ -16,7 +16,10 @@ if not defined PY_CMD (
 echo Executando testes isolados. O banco real nao sera alterado.
 echo.
 %PY_CMD% tests\smoke_test.py
+if errorlevel 1 (set "RC=1" & goto :resultado)
+%PY_CMD% tests\ai_providers_test.py
 set "RC=%ERRORLEVEL%"
+:resultado
 echo.
 if "%RC%"=="0" (echo TODOS OS TESTES PASSARAM.) else (echo ALGUM TESTE FALHOU. Codigo: %RC%)
 pause

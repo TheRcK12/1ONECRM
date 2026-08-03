@@ -30,17 +30,17 @@ from typing import Any
 from urllib.parse import parse_qs, unquote, urlparse
 
 from one_crm_ai import (
-    OpenAIAuthenticationError,
-    OpenAIConfigurationError,
-    OpenAIConnectionError,
-    OpenAIRateLimitError,
-    create_openai_response,
-    public_openai_status,
-    test_openai_connection,
+    AIAuthenticationError,
+    AIConfigurationError,
+    AIConnectionError,
+    AIRateLimitError,
+    create_ai_response,
+    public_ai_status,
+    test_ai_connection,
 )
 
 APP_NAME = "ONE CRM"
-APP_VERSION = "1.8.0-beta.1"
+APP_VERSION = "1.9.0-beta.1"
 BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
 IS_RAILWAY = bool(
@@ -553,7 +553,9 @@ def init_database() -> None:
         user_id INTEGER,
         sale_id INTEGER,
         response_id TEXT,
+        provider TEXT,
         model TEXT,
+        fallback_used INTEGER NOT NULL DEFAULT 0,
         question_length INTEGER NOT NULL DEFAULT 0,
         input_tokens INTEGER NOT NULL DEFAULT 0,
         output_tokens INTEGER NOT NULL DEFAULT 0,
@@ -581,6 +583,11 @@ def init_database() -> None:
             if column not in existing_columns:
                 conn.execute(statement)
         conn.execute("CREATE INDEX IF NOT EXISTS idx_users_custom_role ON users(custom_role_code)")
+        ai_columns = {row[1] for row in conn.execute("PRAGMA table_info(ai_usage_logs)").fetchall()}
+        if "provider" not in ai_columns:
+            conn.execute("ALTER TABLE ai_usage_logs ADD COLUMN provider TEXT")
+        if "fallback_used" not in ai_columns:
+            conn.execute("ALTER TABLE ai_usage_logs ADD COLUMN fallback_used INTEGER NOT NULL DEFAULT 0")
     seed_database()
 
 
@@ -605,7 +612,7 @@ PERMISSIONS = [
     ("roles.manage", "Segurança", "Administrar permissões dos cargos"),
     ("audit.view", "Auditoria", "Visualizar logs de auditoria"),
     ("intelligence.view", "Inteligência", "Visualizar inteligência operacional"),
-    ("ai.use", "Inteligência", "Utilizar o assistente ONE Intelligence com OpenAI"),
+    ("ai.use", "Inteligência", "Utilizar o assistente ONE Intelligence"),
     ("powerbi.view", "Relatórios", "Visualizar o painel Power BI"),
     ("backups.manage", "Sistema", "Criar e listar backups"),
     ("integrations.manage", "Sistema", "Administrar integrações"),
@@ -1485,10 +1492,19 @@ class OneCRMHandler(BaseHTTPRequestHandler):
                                      "description": f"Conversão atual: {conversion:.1f}% em {total} vendas."})
         self.send_json(200, {"ok": True, "generated_at": utc_now(), "insights": insights[:50]})
 
-    def _openai_model_override(self) -> str:
+    def _ai_settings_overrides(self) -> dict[str, str]:
+        keys = ("ai_provider", "groq_model", "openai_model")
         with db_connect() as conn:
-            row = conn.execute("SELECT value FROM system_settings WHERE key='openai_model'").fetchone()
-        return str(row["value"] if row else "").strip()
+            rows = conn.execute(
+                "SELECT key,value FROM system_settings WHERE key IN (?,?,?)",
+                keys,
+            ).fetchall()
+        saved = {str(row["key"]): str(row["value"] or "").strip() for row in rows}
+        return {
+            "provider": saved.get("ai_provider", ""),
+            "groq_model": saved.get("groq_model", ""),
+            "openai_model": saved.get("openai_model", ""),
+        }
 
     def _check_ai_rate_limit(self, user_id: int) -> None:
         now = time.monotonic()
@@ -1506,8 +1522,10 @@ class OneCRMHandler(BaseHTTPRequestHandler):
         user_id: int,
         sale_id: int | None,
         status: str,
+        provider: str = "",
         model: str = "",
         response_id: str = "",
+        fallback_used: bool = False,
         question_length: int = 0,
         usage: dict[str, Any] | None = None,
         error_code: str = "",
@@ -1517,13 +1535,15 @@ class OneCRMHandler(BaseHTTPRequestHandler):
             with db_connect() as conn:
                 conn.execute(
                     """INSERT INTO ai_usage_logs
-                    (user_id,sale_id,response_id,model,question_length,input_tokens,output_tokens,status,error_code,created_at)
-                    VALUES(?,?,?,?,?,?,?,?,?,?)""",
+                    (user_id,sale_id,response_id,provider,model,fallback_used,question_length,input_tokens,output_tokens,status,error_code,created_at)
+                    VALUES(?,?,?,?,?,?,?,?,?,?,?,?)""",
                     (
                         user_id,
                         sale_id,
                         response_id or None,
+                        provider or None,
                         model or None,
+                        1 if fallback_used else 0,
                         max(0, int(question_length)),
                         max(0, int(usage.get("input_tokens") or 0)),
                         max(0, int(usage.get("output_tokens") or 0)),
@@ -1539,13 +1559,23 @@ class OneCRMHandler(BaseHTTPRequestHandler):
         user, _, _ = self.require_user()
         if not (has_permission(user, "ai.use") or has_permission(user, "integrations.manage") or has_permission(user, "intelligence.view")):
             raise ApiError(403, "Seu cargo não possui acesso à inteligência artificial.")
-        status = public_openai_status(self._openai_model_override())
+        overrides = self._ai_settings_overrides()
+        status = public_ai_status(
+            provider_override=overrides["provider"],
+            groq_model_override=overrides["groq_model"],
+            openai_model_override=overrides["openai_model"],
+        )
         status.update({
             "permission": has_permission(user, "ai.use"),
             "rate_limit": AI_RATE_LIMIT,
             "rate_window_seconds": AI_RATE_WINDOW_SECONDS,
         })
-        self.send_json(200, {"ok": True, "openai": status})
+        self.send_json(200, {
+            "ok": True,
+            "ai": status,
+            "groq": status.get("providers", {}).get("groq", {}),
+            "openai": status.get("providers", {}).get("openai", {}),
+        })
 
     def _build_ai_context(self, user: dict[str, Any], sale_id: int | None = None) -> dict[str, Any]:
         where, params = sale_scope_sql(user)
@@ -1594,6 +1624,22 @@ class OneCRMHandler(BaseHTTPRequestHandler):
                 }
                 for row in recent
             ]
+            uf_rows = conn.execute(
+                f"""SELECT COALESCE(NULLIF(TRIM(s.uf),''),'Sem UF') AS uf,COUNT(*) AS total,
+                    SUM(CASE WHEN s.installation_status IN ('instalado','instalado_regra_pdv') THEN 1 ELSE 0 END) AS instaladas
+                    FROM sales s WHERE {where}
+                    GROUP BY COALESCE(NULLIF(TRIM(s.uf),''),'Sem UF') ORDER BY total DESC LIMIT 27""",
+                params,
+            ).fetchall()
+            context["vendas_por_uf"] = [dict(row) for row in uf_rows]
+            team_rows = conn.execute(
+                f"""SELECT COALESCE(t.name,'Sem equipe') AS equipe,COUNT(*) AS total,
+                    SUM(CASE WHEN s.installation_status IN ('instalado','instalado_regra_pdv') THEN 1 ELSE 0 END) AS instaladas
+                    FROM sales s LEFT JOIN teams t ON t.id=s.team_id WHERE {where}
+                    GROUP BY COALESCE(t.name,'Sem equipe') ORDER BY total DESC LIMIT 30""",
+                params,
+            ).fetchall()
+            context["equipes"] = [dict(row) for row in team_rows]
             if sale_id is not None:
                 row = conn.execute(
                     """SELECT s.*,COALESCE(t.name,'Sem equipe') AS team_name,u.name AS seller_name
@@ -1646,34 +1692,38 @@ class OneCRMHandler(BaseHTTPRequestHandler):
             except (TypeError, ValueError):
                 raise ApiError(400, "O número da venda é inválido.")
         context = self._build_ai_context(user, sale_id)
-        model_override = self._openai_model_override()
+        overrides = self._ai_settings_overrides()
         try:
-            result = create_openai_response(
+            result = create_ai_response(
                 question=question,
                 context=context,
-                model_override=model_override,
+                provider_override=overrides["provider"],
+                groq_model_override=overrides["groq_model"],
+                openai_model_override=overrides["openai_model"],
             )
         except ValueError as exc:
             self._record_ai_usage(user_id=user["id"], sale_id=sale_id, status="error", question_length=len(question), error_code="validation")
             raise ApiError(400, str(exc)) from exc
-        except OpenAIConfigurationError as exc:
+        except AIConfigurationError as exc:
             self._record_ai_usage(user_id=user["id"], sale_id=sale_id, status="error", question_length=len(question), error_code="configuration")
             raise ApiError(503, str(exc)) from exc
-        except OpenAIAuthenticationError as exc:
+        except AIAuthenticationError as exc:
             self._record_ai_usage(user_id=user["id"], sale_id=sale_id, status="error", question_length=len(question), error_code="authentication")
             raise ApiError(502, str(exc)) from exc
-        except OpenAIRateLimitError as exc:
-            self._record_ai_usage(user_id=user["id"], sale_id=sale_id, status="error", question_length=len(question), error_code="openai_rate_limit")
+        except AIRateLimitError as exc:
+            self._record_ai_usage(user_id=user["id"], sale_id=sale_id, status="error", question_length=len(question), error_code="provider_rate_limit")
             raise ApiError(429, str(exc)) from exc
-        except OpenAIConnectionError as exc:
+        except AIConnectionError as exc:
             self._record_ai_usage(user_id=user["id"], sale_id=sale_id, status="error", question_length=len(question), error_code="connection")
             raise ApiError(502, str(exc)) from exc
         self._record_ai_usage(
             user_id=user["id"],
             sale_id=sale_id,
             status="success",
+            provider=result.get("provider", ""),
             model=result.get("model", ""),
             response_id=result.get("response_id", ""),
+            fallback_used=bool(result.get("fallback_used")),
             question_length=len(question),
             usage=result.get("usage") or {},
         )
@@ -1682,7 +1732,13 @@ class OneCRMHandler(BaseHTTPRequestHandler):
             "ai.ask",
             "sale" if sale_id else "operation",
             sale_id,
-            {"model": result.get("model"), "response_id": result.get("response_id"), "question_length": len(question)},
+            {
+                "provider": result.get("provider"),
+                "model": result.get("model"),
+                "fallback_used": bool(result.get("fallback_used")),
+                "response_id": result.get("response_id"),
+                "question_length": len(question),
+            },
             self.client_ip(),
         )
         self.send_json(200, {"ok": True, **result})
@@ -1690,18 +1746,38 @@ class OneCRMHandler(BaseHTTPRequestHandler):
     def api_ai_test(self, actor: dict[str, Any]) -> None:
         if not has_permission(actor, "integrations.manage"):
             raise ApiError(403, "Sem permissão para testar integrações.")
+        data = self.read_json()
+        provider = str(data.get("provider") or "").strip().lower()
+        overrides = self._ai_settings_overrides()
+        if not provider:
+            provider = overrides["provider"] or "groq"
         try:
-            result = test_openai_connection(self._openai_model_override())
-        except OpenAIConfigurationError as exc:
+            result = test_ai_connection(
+                provider=provider,
+                groq_model_override=overrides["groq_model"],
+                openai_model_override=overrides["openai_model"],
+            )
+        except AIConfigurationError as exc:
             raise ApiError(503, str(exc)) from exc
-        except OpenAIAuthenticationError as exc:
+        except AIAuthenticationError as exc:
             raise ApiError(502, str(exc)) from exc
-        except OpenAIRateLimitError as exc:
+        except AIRateLimitError as exc:
             raise ApiError(429, str(exc)) from exc
-        except OpenAIConnectionError as exc:
+        except AIConnectionError as exc:
             raise ApiError(502, str(exc)) from exc
-        audit(actor["id"], "integration.openai.test", "integration", "openai", {"model": result.get("model")}, self.client_ip())
-        self.send_json(200, {"ok": True, "message": "Conexão com a OpenAI confirmada.", "model": result.get("model"), "response_id": result.get("response_id")})
+        label = result.get("provider_label") or provider.title()
+        audit(actor["id"], "integration.ai.test", "integration", provider, {"model": result.get("model")}, self.client_ip())
+        self.send_json(
+            200,
+            {
+                "ok": True,
+                "message": f"Conexão com {label} confirmada.",
+                "provider": result.get("provider"),
+                "provider_label": label,
+                "model": result.get("model"),
+                "response_id": result.get("response_id"),
+            },
+        )
 
     # ------------------------- vendas -------------------------
     def api_cep_lookup(self, raw_cep: str, query: dict[str, list[str]] | None = None) -> None:
@@ -2648,6 +2724,8 @@ class OneCRMHandler(BaseHTTPRequestHandler):
         "generic_webhook_url": False,
         "evolution_api_url": False,
         "evolution_api_key": True,
+        "ai_provider": False,
+        "groq_model": False,
         "openai_model": False,
     }
 
@@ -2673,8 +2751,14 @@ class OneCRMHandler(BaseHTTPRequestHandler):
                     "configured": bool(row and row["value"]),
                     "value": row["value"] if row else "",
                 }
-        openai_status = public_openai_status(result.get("openai_model", {}).get("value") or "")
-        result["openai"] = openai_status
+        ai_status = public_ai_status(
+            provider_override=result.get("ai_provider", {}).get("value") or "",
+            groq_model_override=result.get("groq_model", {}).get("value") or "",
+            openai_model_override=result.get("openai_model", {}).get("value") or "",
+        )
+        result["ai"] = ai_status
+        result["groq"] = ai_status.get("providers", {}).get("groq", {})
+        result["openai"] = ai_status.get("providers", {}).get("openai", {})
         self.send_json(
             200,
             {
@@ -2684,9 +2768,15 @@ class OneCRMHandler(BaseHTTPRequestHandler):
                     "powerbi": "URL incorporada funcional.",
                     "webhook": "Eventos de venda são enviados por POST.",
                     "evolution": "Credenciais armazenadas; conector específico depende da versão da API.",
+                    "ai": (
+                        "O ONE Intelligence pode usar GroqCloud, OpenAI ou análise local. "
+                        "As chaves são lidas apenas das variáveis do Railway."
+                    ),
+                    "groq": (
+                        "GROQ_API_KEY é lida com segurança do Railway; o modo local assume quando o limite gratuito é atingido."
+                    ),
                     "openai": (
-                        "Chave lida com segurança da variável OPENAI_API_KEY no Railway. "
-                        "A chave nunca é enviada ao navegador nem salva no SQLite."
+                        "OPENAI_API_KEY é opcional e pode permanecer desativada enquanto não houver faturamento."
                     ),
                 },
             },
@@ -2715,6 +2805,10 @@ class OneCRMHandler(BaseHTTPRequestHandler):
                     value = ""
                 if value and key in {"powerbi_embed_url", "generic_webhook_url", "evolution_api_url"} and not value.lower().startswith(("http://", "https://")):
                     raise ApiError(400, f"A URL de {key} precisa começar com http:// ou https://.")
+                if key == "ai_provider" and value and value not in {"auto", "groq", "openai", "local"}:
+                    raise ApiError(400, "Provedor de IA inválido.")
+                if key in {"groq_model", "openai_model"} and len(value) > 120:
+                    raise ApiError(400, "O identificador do modelo é muito longo.")
                 conn.execute(
                     """INSERT INTO system_settings(key,value,secret,updated_by,updated_at) VALUES(?,?,?,?,?)
                     ON CONFLICT(key) DO UPDATE SET value=excluded.value,secret=excluded.secret,
@@ -2722,10 +2816,10 @@ class OneCRMHandler(BaseHTTPRequestHandler):
                     (key, value, 1 if secret else 0, actor["id"], now),
                 )
                 changed.append(key)
-        # Credenciais OpenAI antigas gravadas no SQLite deixam de ser utilizadas.
-        # O segredo deve existir apenas em OPENAI_API_KEY no ambiente do servidor.
+        # Credenciais externas antigas gravadas no SQLite deixam de ser utilizadas.
+        # Segredos devem existir apenas nas variáveis GROQ_API_KEY e OPENAI_API_KEY.
         with db_connect() as conn:
-            conn.execute("DELETE FROM system_settings WHERE key='openai_api_key'")
+            conn.execute("DELETE FROM system_settings WHERE key IN ('openai_api_key','groq_api_key')")
         audit(actor["id"], "integrations.update", "settings", None, {"keys": changed}, self.client_ip())
         self.send_json(200, {"ok": True, "message": "Integrações atualizadas."})
 

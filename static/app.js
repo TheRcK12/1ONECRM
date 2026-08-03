@@ -992,7 +992,8 @@ async function sendAIQuestion(questionOverride='') {
   try{
     const result=await api('/api/ai/ask',{method:'POST',body:{question,sale_id:saleInput?.value||null}});
     const usage=result.usage||{};
-    const meta=[result.model,usage.total_tokens?`${usage.total_tokens} tokens`:null].filter(Boolean).join(' · ');
+    const provider=result.provider_label||result.provider||'ONE Intelligence';
+    const meta=[provider,result.model,usage.total_tokens?`${usage.total_tokens} tokens`:null,result.fallback_used?'fallback local':null].filter(Boolean).join(' · ');
     state.aiMessages.push({role:'assistant',text:result.answer,meta});
     renderAIMessages();
   }catch(error){
@@ -1008,37 +1009,50 @@ async function renderIntelligence() {
   setPage('Inteligência','ONE INTELLIGENCE');
   const [local,statusResult]=await Promise.all([
     api('/api/intelligence'),
-    api('/api/ai/status').catch(error=>({openai:{ready:false,configured:false,permission:false,error:error.message}})),
+    api('/api/ai/status').catch(error=>({ai:{ready:false,permission:false,error:error.message,providers:{}}})),
   ]);
-  const ai=statusResult.openai||{};
+  const ai=statusResult.ai||{};
+  const providers=ai.providers||{};
+  const activeLabel=ai.provider_label||'Análise local';
   const aiAvailable=Boolean(ai.ready && ai.permission);
+  const externalConfigured=Boolean(ai.external_configured);
   const quickPrompts=[
     'Resuma as principais pendências da operação e indique prioridades.',
+    'Quais estados podemos focar nas vendas hoje?',
     'Quais riscos operacionais aparecem nos indicadores atuais?',
     'Sugira um plano de ação curto para melhorar a conversão.',
     'Liste os pontos que merecem acompanhamento hoje.',
   ];
+  const providerStatus=ai.active_provider==='local'
+    ? badge('Modo local ativo','cyan')
+    : badge(`${activeLabel} conectado`,'ok');
   $('#content').innerHTML=`
-    <div class="page-head"><div><h1>ONE Intelligence</h1><p class="muted">Análise local e assistente OpenAI com acesso limitado ao escopo do seu cargo.</p></div><button class="btn" onclick="renderRoute()">Atualizar</button></div>
+    <div class="page-head"><div><h1>ONE Intelligence</h1><p class="muted">Assistente operacional com GroqCloud, OpenAI opcional e fallback local automático.</p></div><button class="btn" onclick="renderRoute()">Atualizar</button></div>
     <section class="panel ai-panel">
-      <header class="panel-head"><div><h3>Assistente operacional</h3><small class="muted">${ai.ready?`Modelo ${esc(ai.model)}`:'Configuração da OpenAI pendente'}</small></div>${ai.ready?badge('OpenAI conectada','ok'):badge('OpenAI não configurada','aguard')}</header>
+      <header class="panel-head"><div><h3>Assistente operacional</h3><small class="muted">${esc(activeLabel)} · ${esc(ai.model||'motor-local')}</small></div>${providerStatus}</header>
       <div class="panel-body">
-        ${!ai.permission?'<div class="integration-notice warning"><strong>Seu cargo não possui a permissão “Utilizar o assistente ONE Intelligence com OpenAI”.</strong><span>O Dono pode liberar essa opção em Cargos e permissões.</span></div>':''}
-        ${ai.permission&&!ai.ready?'<div class="integration-notice warning"><strong>A chave da OpenAI ainda não foi configurada no Railway.</strong><span>Adicione OPENAI_API_KEY nas Variables do serviço e publique novamente.</span></div>':''}
+        ${!ai.permission?'<div class="integration-notice warning"><strong>Seu cargo não possui a permissão “Utilizar o assistente ONE Intelligence”.</strong><span>O Dono pode liberar essa opção em Cargos e permissões.</span></div>':''}
+        ${ai.permission&&!externalConfigured?'<div class="integration-notice info"><strong>Nenhuma IA externa está configurada.</strong><span>O chat continua funcionando no modo local. Para respostas mais elaboradas, configure GROQ_API_KEY gratuitamente no Railway.</span></div>':''}
+        ${ai.permission&&ai.active_provider==='local'&&externalConfigured?'<div class="integration-notice info"><strong>O fallback local está ativo.</strong><span>O provedor externo pode estar sem cota, indisponível ou ter sido desativado.</span></div>':''}
         <div class="ai-layout ${aiAvailable?'':'disabled'}">
           <div class="ai-chat">
             <div id="ai-messages" class="ai-messages" aria-live="polite"></div>
             <form id="ai-form" class="ai-form">
               <label class="ai-sale-field">Venda específica <span class="muted">(opcional)</span><input id="ai-sale-id" name="sale_id" type="number" min="1" placeholder="Ex.: 152" ${aiAvailable?'':'disabled'}></label>
               <label class="ai-question-field">Pergunta<textarea id="ai-question" name="question" maxlength="2000" rows="4" placeholder="Ex.: Quais vendas exigem prioridade hoje?" ${aiAvailable?'':'disabled'}></textarea></label>
-              <div class="ai-form-actions"><small class="muted">A IA recebe indicadores e dados operacionais sem CPF, telefone, e-mail ou endereço completo.</small><button id="ai-send" class="btn primary" ${aiAvailable?'':'disabled'}>Perguntar ao ONE</button></div>
+              <div class="ai-form-actions"><small class="muted">O contexto externo não inclui CPF, telefone, e-mail nem endereço completo. Se a cota externa acabar, a análise local assume.</small><button id="ai-send" class="btn primary" ${aiAvailable?'':'disabled'}>Perguntar ao ONE</button></div>
             </form>
           </div>
           <aside class="ai-suggestions"><strong>Sugestões rápidas</strong>${quickPrompts.map((prompt,index)=>`<button type="button" class="ai-quick" data-ai-quick="${index}" ${aiAvailable?'':'disabled'}>${esc(prompt)}</button>`).join('')}</aside>
         </div>
       </div>
     </section>
-    <section class="panel"><header class="panel-head"><div><h3>Alertas operacionais locais</h3><small class="muted">Gerados sem consumo da API.</small></div><span class="badge cyan">${local.insights.length}</span></header><div class="panel-body">${local.insights.length?local.insights.map(i=>`<article class="insight ${i.severity}"><h4>${esc(i.title)}</h4><p>${esc(i.description)}</p>${i.sale_id?`<button class="btn small ghost" style="margin-top:10px" onclick="openSaleDetail(${i.sale_id})">Abrir venda</button>`:''}</article>`).join(''):'<div class="empty">Nenhum alerta relevante.</div>'}</div></section>`;
+    <section class="panel"><header class="panel-head"><div><h3>Provedores disponíveis</h3><small class="muted">Seleção atual: ${esc(ai.requested_provider||'auto')}</small></div></header><div class="panel-body grid-3">
+      <div class="team-card"><h4>GroqCloud</h4><p>${providers.groq?.configured?'Chave detectada no Railway.':'GROQ_API_KEY não configurada.'}</p>${providers.groq?.configured?badge(`Pronto · ${providers.groq.model}`,'ok'):badge('Não configurado','aguard')}</div>
+      <div class="team-card"><h4>OpenAI</h4><p>${providers.openai?.configured?'Chave detectada no Railway.':'Opcional; pode permanecer sem saldo.'}</p>${providers.openai?.configured?badge(`Pronto · ${providers.openai.model}`,'ok'):badge('Opcional','aguard')}</div>
+      <div class="team-card"><h4>Análise local</h4><p>Indicadores e regras do próprio CRM, sem consumo externo.</p>${badge('Sempre disponível','cyan')}</div>
+    </div></section>
+    <section class="panel"><header class="panel-head"><div><h3>Alertas operacionais locais</h3><small class="muted">Gerados sem consumo de API.</small></div><span class="badge cyan">${local.insights.length}</span></header><div class="panel-body">${local.insights.length?local.insights.map(i=>`<article class="insight ${i.severity}"><h4>${esc(i.title)}</h4><p>${esc(i.description)}</p>${i.sale_id?`<button class="btn small ghost" style="margin-top:10px" onclick="openSaleDetail(${i.sale_id})">Abrir venda</button>`:''}</article>`).join(''):'<div class="empty">Nenhum alerta relevante.</div>'}</div></section>`;
   renderAIMessages();
   $('#ai-form')?.addEventListener('submit',e=>{e.preventDefault();sendAIQuestion();});
   $$('[data-ai-quick]').forEach(button=>button.addEventListener('click',()=>sendAIQuestion(quickPrompts[Number(button.dataset.aiQuick)])));
@@ -1260,21 +1274,45 @@ async function renderBackups() {
 
 async function renderIntegrations() {
   setPage('Integrações','CONEXÕES EXTERNAS');
-  const data=await api('/api/integrations');const i=data.integrations;const openai=i.openai||{};
+  const data=await api('/api/integrations');
+  const i=data.integrations;
+  const ai=i.ai||{};
+  const groq=i.groq||{};
+  const openai=i.openai||{};
+  const providerEnvironment=Boolean((window.ONE_CRM_AI_PROVIDER_SOURCE||'')==='environment');
+  const savedProvider=i.ai_provider?.value||ai.requested_provider||'auto';
   $('#content').innerHTML=`
-    <div class="page-head"><div><h1>Central de integrações</h1><p class="muted">Segredos ficam no servidor. O navegador recebe apenas o estado da configuração.</p></div></div>
-    <section class="panel"><header class="panel-head"><h3>Configurações</h3></header><div class="panel-body"><form id="integrations-form" class="form-grid">
+    <div class="page-head"><div><h1>Central de integrações</h1><p class="muted">As chaves ficam apenas no Railway. O navegador recebe somente o estado da configuração.</p></div></div>
+    <section class="panel"><header class="panel-head"><h3>Configurações gerais</h3></header><div class="panel-body"><form id="integrations-form" class="form-grid">
       <label class="full">Power BI Embed URL<input name="powerbi_embed_url" value="${esc(i.powerbi_embed_url.value)}" placeholder="https://app.powerbi.com/view?... "><small class="muted">URL incorporada pronta para uso em relatórios.</small></label>
       <label class="full">Webhook genérico<input name="generic_webhook_url" value="${esc(i.generic_webhook_url.value)}" placeholder="https://seu-n8n/webhook/one-crm"><small class="muted">Recebe eventos sale.created, sale.updated e sale.workflow_updated.</small></label>
       <label>Evolution API URL<input name="evolution_api_url" value="${esc(i.evolution_api_url.value)}"></label>
       <label>Evolution API Key<input name="evolution_api_key" type="password" value="${esc(i.evolution_api_key.value)}"><small class="muted">${i.evolution_api_key.configured?'Já configurada.':''}</small></label>
-      <label class="full">Modelo OpenAI<input name="openai_model" value="${esc(i.openai_model.value||openai.model||'gpt-5.6-luna')}" ${openai.model_source==='environment'?'disabled':''}><small class="muted">${openai.model_source==='environment'?'Controlado pela variável OPENAI_MODEL no Railway.':'Pode ser salvo no ONE CRM quando OPENAI_MODEL não estiver definida.'}</small></label>
-      <div class="full integration-secret-box"><div><strong>Chave OpenAI</strong><p>${openai.configured?'OPENAI_API_KEY foi encontrada no ambiente do Railway.':'OPENAI_API_KEY ainda não foi configurada no Railway.'}</p><small>A chave não é salva no SQLite e nunca volta para o navegador.</small></div>${openai.configured?badge('Configurada','ok'):badge('Ausente','cancelada')}</div>
-      <div class="full page-actions integration-actions"><button type="button" class="btn" id="test-openai" ${openai.configured?'':'disabled'}>Testar OpenAI</button><button class="btn primary">Salvar integrações</button></div>
+      <label class="full">Provedor do ONE Intelligence<select name="ai_provider">
+        <option value="auto" ${savedProvider==='auto'?'selected':''}>Automático: Groq → OpenAI → Local</option>
+        <option value="groq" ${savedProvider==='groq'?'selected':''}>GroqCloud</option>
+        <option value="openai" ${savedProvider==='openai'?'selected':''}>OpenAI</option>
+        <option value="local" ${savedProvider==='local'?'selected':''}>Somente análise local</option>
+      </select><small class="muted">A variável ONE_CRM_AI_PROVIDER no Railway, quando definida, tem prioridade sobre esta seleção.</small></label>
+      <label>Modelo Groq<input name="groq_model" value="${esc(i.groq_model.value||groq.model||'llama-3.1-8b-instant')}" ${groq.model_source==='environment'?'disabled':''}><small class="muted">${groq.model_source==='environment'?'Controlado por GROQ_MODEL no Railway.':'Recomendado para o plano gratuito: llama-3.1-8b-instant.'}</small></label>
+      <label>Modelo OpenAI<input name="openai_model" value="${esc(i.openai_model.value||openai.model||'gpt-5.6-luna')}" ${openai.model_source==='environment'?'disabled':''}><small class="muted">Opcional; usado somente quando houver chave e saldo.</small></label>
+      <div class="integration-secret-box"><div><strong>Chave GroqCloud</strong><p>${groq.configured?'GROQ_API_KEY foi encontrada no Railway.':'GROQ_API_KEY ainda não foi configurada no Railway.'}</p><small>A chave nunca é salva no SQLite nem volta ao navegador.</small></div>${groq.configured?badge('Configurada','ok'):badge('Ausente','cancelada')}</div>
+      <div class="integration-secret-box"><div><strong>Chave OpenAI</strong><p>${openai.configured?'OPENAI_API_KEY foi encontrada no Railway.':'OPENAI_API_KEY é opcional e está ausente.'}</p><small>Pode permanecer desativada enquanto não houver faturamento.</small></div>${openai.configured?badge('Configurada','ok'):badge('Opcional','aguard')}</div>
+      <div class="full page-actions integration-actions"><button type="button" class="btn" id="test-groq" ${groq.configured?'':'disabled'}>Testar Groq</button><button type="button" class="btn" id="test-openai" ${openai.configured?'':'disabled'}>Testar OpenAI</button><button type="button" class="btn" id="test-local">Testar modo local</button><button class="btn primary">Salvar integrações</button></div>
     </form></div></section>
-    <section class="panel"><header class="panel-head"><h3>Estado dos conectores</h3></header><div class="panel-body grid-2"><div class="team-card"><h4>Power BI</h4><p>${esc(data.notes.powerbi)}</p>${i.powerbi_embed_url.configured?badge('Configurado','ok'):badge('Não configurado','aguard')}</div><div class="team-card"><h4>Webhook / N8N</h4><p>${esc(data.notes.webhook)}</p>${i.generic_webhook_url.configured?badge('Configurado','ok'):badge('Não configurado','aguard')}</div><div class="team-card"><h4>Evolution API</h4><p>${esc(data.notes.evolution)}</p>${i.evolution_api_key.configured?badge('Credencial salva','ok'):badge('Pendente','aguard')}</div><div class="team-card"><h4>OpenAI</h4><p>${esc(data.notes.openai)}</p>${openai.ready?badge(`Ativa · ${openai.model}`,'ok'):badge('Não configurada','aguard')}</div></div></section>`;
-  $('#integrations-form').addEventListener('submit',async e=>{e.preventDefault();try{const payload=formObject(e.currentTarget);delete payload.openai_api_key;await api('/api/integrations',{method:'PUT',body:payload});toast('Integrações atualizadas.');renderIntegrations();}catch(error){toast(error.message,'error');}});
-  $('#test-openai')?.addEventListener('click',async e=>{const button=e.currentTarget;button.disabled=true;button.textContent='Testando...';try{const result=await api('/api/ai/test',{method:'POST',body:{}});toast(`${result.message} Modelo: ${result.model}`);}catch(error){toast(error.message,'error');}finally{button.disabled=false;button.textContent='Testar OpenAI';}});
+    <section class="panel"><header class="panel-head"><h3>Estado dos conectores</h3></header><div class="panel-body grid-2">
+      <div class="team-card"><h4>Power BI</h4><p>${esc(data.notes.powerbi)}</p>${i.powerbi_embed_url.configured?badge('Configurado','ok'):badge('Não configurado','aguard')}</div>
+      <div class="team-card"><h4>Webhook / N8N</h4><p>${esc(data.notes.webhook)}</p>${i.generic_webhook_url.configured?badge('Configurado','ok'):badge('Não configurado','aguard')}</div>
+      <div class="team-card"><h4>Evolution API</h4><p>${esc(data.notes.evolution)}</p>${i.evolution_api_key.configured?badge('Credencial salva','ok'):badge('Pendente','aguard')}</div>
+      <div class="team-card"><h4>ONE Intelligence</h4><p>${esc(data.notes.ai)}</p>${ai.ready?badge(`${ai.provider_label} · ${ai.model}`,'ok'):badge('Desativado','aguard')}</div>
+      <div class="team-card"><h4>GroqCloud</h4><p>${esc(data.notes.groq)}</p>${groq.configured?badge(`Ativo · ${groq.model}`,'ok'):badge('Não configurado','aguard')}</div>
+      <div class="team-card"><h4>OpenAI</h4><p>${esc(data.notes.openai)}</p>${openai.configured?badge(`Disponível · ${openai.model}`,'ok'):badge('Opcional','aguard')}</div>
+    </div></section>`;
+  $('#integrations-form').addEventListener('submit',async e=>{e.preventDefault();try{const payload=formObject(e.currentTarget);delete payload.openai_api_key;delete payload.groq_api_key;await api('/api/integrations',{method:'PUT',body:payload});toast('Integrações atualizadas.');renderIntegrations();}catch(error){toast(error.message,'error');}});
+  const testProvider=async(button,provider)=>{button.disabled=true;const original=button.textContent;button.textContent='Testando...';try{const result=await api('/api/ai/test',{method:'POST',body:{provider}});toast(`${result.message} Modelo: ${result.model}`);}catch(error){toast(error.message,'error');}finally{button.disabled=false;button.textContent=original;}};
+  $('#test-groq')?.addEventListener('click',e=>testProvider(e.currentTarget,'groq'));
+  $('#test-openai')?.addEventListener('click',e=>testProvider(e.currentTarget,'openai'));
+  $('#test-local')?.addEventListener('click',e=>testProvider(e.currentTarget,'local'));
 }
 
 async function renderAccount() {
