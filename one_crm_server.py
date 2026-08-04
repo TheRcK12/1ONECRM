@@ -40,7 +40,7 @@ from one_crm_ai import (
 )
 
 APP_NAME = "ONE CRM"
-APP_VERSION = "1.9.0-beta.1"
+APP_VERSION = "2.0.0-beta.1"
 BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
 IS_RAILWAY = bool(
@@ -2981,6 +2981,11 @@ def main() -> None:
         except Exception:
             pass
 
+
+
+# Camada multi-perfil instalada após a definição completa do servidor.
+from one_crm_profiles import install_profiles
+install_profiles(globals())
 
 if __name__ == "__main__":
     main()

@@ -262,7 +262,7 @@ def main() -> int:
         manager = Client()
         manager.login("manager@test.local", "Manager123")
         assert len(manager.request("/api/sales")["sales"]) == 2
-        assert len(manager.request("/api/users")["users"]) == 6
+        assert len(manager.request("/api/users")["users"]) == 5
         manager.request("/api/users", "POST", {"name": "Nope"}, expected=403)
         assert manager.request("/api/daily-analysis")["teams"]
         manager.request("/api/intelligence")

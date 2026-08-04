@@ -1,6 +1,6 @@
 {
   "name": "ONE CRM",
-  "version": "1.9.0-beta.1",
+  "version": "2.0.0-beta.1",
   "channel": "beta-online",
-  "description": "ONE Intelligence com GroqCloud gratuito, OpenAI opcional e fallback local automático"
+  "description": "Perfis de negócio isolados, Contratantes e módulo inicial de controle de caixa"
 }

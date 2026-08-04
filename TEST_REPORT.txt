@@ -1,12 +1,12 @@
-ONE CRM 1.9.0-beta.1
+ONE CRM 2.0.0-beta.1 - RELATÓRIO DE TESTES
 
-Validações executadas:
-- Compilação do backend Python: OK
-- Validação sintática do JavaScript: OK
-- Smoke test funcional: OK
-- Teste de modo Railway: OK
-- Teste GroqCloud/OpenAI/fallback local: OK
-- Mascaramento de CPF, telefone e e-mail no contexto externo: OK
-- Migração de logs de IA com provider/fallback_used: OK
+APROVADOS:
+- Compilação Python: one_crm_server.py, one_crm_ai.py, one_crm_profiles.py
+- Sintaxe JavaScript: static/app.js
+- SMOKE TEST: OK
+- MULTI PROFILE TEST: OK
+- AI PROVIDERS TEST: OK
+- OPENAI INTEGRATION TEST: OK (provedor simulado)
+- ONLINE MODE TEST: OK
 
-As chamadas de teste utilizam servidores simulados e não consomem créditos externos.
+O teste multi-perfil validou criação de perfil, vínculo do Contratante, bloqueio de troca para outro perfil, isolamento de dados e lançamentos de caixa.

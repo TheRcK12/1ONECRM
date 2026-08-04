@@ -296,3 +296,18 @@ html[data-theme="light"] .auth-footer{border-top-color:#dce7ea;color:#7c9096}
 .integration-actions{justify-content:space-between!important}
 @media(max-width:980px){.ai-layout{grid-template-columns:1fr}.ai-suggestions{grid-template-columns:repeat(2,minmax(0,1fr))}.ai-suggestions>strong{grid-column:1/-1}}
 @media(max-width:680px){.ai-form{grid-template-columns:1fr}.ai-form-actions{align-items:stretch;flex-direction:column}.ai-form-actions .btn{width:100%}.ai-suggestions{grid-template-columns:1fr}.integration-secret-box{align-items:flex-start;flex-direction:column}.integration-actions{align-items:stretch;flex-direction:column}.integration-actions .btn{width:100%}}
+
+/* ONE CRM 2.0 - Perfis de negócio */
+.profile-switcher{display:flex;align-items:center;min-width:180px}
+.profile-switcher label{display:grid;gap:2px;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;width:100%}
+.profile-switcher select{height:38px;min-width:190px;padding:0 32px 0 12px;border-radius:10px;border:1px solid var(--line);background:var(--panel);color:var(--text);font:inherit;text-transform:none;letter-spacing:0}
+.profile-chip{display:grid;text-align:left;gap:1px;border:1px solid var(--line);background:var(--panel);color:var(--text);border-radius:10px;padding:7px 12px;min-width:180px;cursor:pointer}
+.profile-chip small{font-size:9px;color:var(--muted);letter-spacing:.1em}.profile-chip strong{font-size:12px;font-weight:600}
+.profile-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px}
+.profile-card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:18px;display:grid;gap:16px;box-shadow:var(--shadow)}
+.profile-card.inactive{opacity:.62}.profile-card header,.profile-card footer{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}.profile-card footer{align-items:center;justify-content:flex-end}
+.profile-card h3{margin:5px 0 0;font-size:19px}.profile-card p{margin:0;color:var(--muted);min-height:42px}.profile-type{font-size:10px;color:var(--cyan);letter-spacing:.09em;text-transform:uppercase}
+.profile-metrics{display:flex;gap:20px;border-top:1px solid var(--line);border-bottom:1px solid var(--line);padding:12px 0}.profile-metrics span{display:grid;color:var(--muted);font-size:11px}.profile-metrics b{font-size:18px;color:var(--text)}
+.profile-contractor{display:grid;gap:3px}.profile-contractor small{color:var(--muted);text-transform:uppercase;font-size:10px;letter-spacing:.08em}.profile-contractor strong{font-weight:600}
+.money-cell{font-weight:650;white-space:nowrap}.money-cell.positive{color:var(--green)}.money-cell.negative{color:var(--red)}
+@media(max-width:980px){.profile-switcher{order:3;width:100%}.profile-switcher select,.profile-chip{width:100%;min-width:0}.top-actions{flex-wrap:wrap}}

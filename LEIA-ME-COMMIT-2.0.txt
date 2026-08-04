@@ -1,0 +1,11 @@
+ONE CRM 2.0.0-beta.1 - ARQUIVOS PARA COMMIT
+
+1. Faça backup no ONE CRM.
+2. Extraia este pacote sobre a raiz do repositório 1ONECRM.
+3. Mantenha a estrutura das pastas static/ e tests/.
+4. No GitHub Desktop: Commit to main -> Push origin.
+5. Aguarde o Railway publicar o commit mais recente.
+6. NÃO remova o Volume /app/data.
+7. Abra o site e pressione Ctrl+F5.
+
+O Dono verá o menu Perfis. O Contratante verá e administrará somente o perfil ao qual foi vinculado.

@@ -14,6 +14,9 @@ const state = {
   currentSales: [],
   currentSale: null,
   aiMessages: [],
+  profiles: [],
+  profileTemplates: [],
+  cashTransactions: [],
 };
 
 const $ = (selector, root = document) => root.querySelector(selector);
@@ -36,7 +39,12 @@ const fmtDateTime = value => {
   return date.toLocaleString('pt-BR');
 };
 const initials = name => String(name || 'OC').split(/\s+/).slice(0,2).map(x=>x[0]).join('').toUpperCase();
-const has = permission => baseRole(state.user) === 'owner' || state.user?.permissions?.includes(permission);
+const has = permission => state.user?.is_platform_owner || baseRole(state.user) === 'owner' || state.user?.permissions?.includes(permission);
+const isPlatformOwner = () => Boolean(state.user?.is_platform_owner);
+const activeProfile = () => state.user?.profile || {};
+const activeModules = () => new Set(activeProfile().modules || []);
+const routeModuleMap = {dashboard:'dashboard',sales:'sales','new-sale':'sales',bko:'bko',daily:'daily',powerbi:'powerbi',ranking:'ranking',intelligence:'intelligence',users:'users',teams:'teams',plans:'plans',catalogs:'catalogs',roles:'roles',audit:'audit',backups:'backups',integrations:'integrations',cash:'cash','profile-settings':'users'};
+const moduleEnabled = route => route === 'profiles' ? isPlatformOwner() : activeModules().has(routeModuleMap[route] || route);
 const currentTheme = () => document.documentElement.dataset.theme === 'light' ? 'light' : 'dark';
 function updateThemeUi() {
   const light = currentTheme() === 'light';
@@ -264,6 +272,7 @@ const salesNavigationItems = [
 ];
 
 const administrativeNavigationItems = [
+  {id:'profile-settings',label:'Configurar perfil',icon:'◈',test:()=>isPlatformOwner()||state.user?.is_contractor},
   {id:'users',label:'Funcionários',icon:'♙',permission:'users.view'},
   {id:'teams',label:'Equipes',icon:'◫',test:()=>has('teams.view')||has('teams.manage')},
   {id:'plans',label:'Planos',icon:'▱',permission:'plans.manage'},
@@ -275,18 +284,22 @@ const administrativeNavigationItems = [
 ];
 
 const navigationItems = [
+  {id:'profiles',label:'Perfis',icon:'▦',test:()=>isPlatformOwner()},
   {id:'dashboard',label:'Dashboard',icon:'⌂',permission:'dashboard.view'},
   {id:'sales-group',label:'Vendas',icon:'▤',children:salesNavigationItems},
   {id:'daily',label:'Análise do dia',icon:'↗',permission:'daily.view'},
   {id:'powerbi',label:'Power BI',icon:'▥',permission:'powerbi.view'},
   {id:'ranking',label:'Ranking',icon:'◇',test:()=>has('ranking.own')||has('ranking.all')},
+  {id:'cash',label:'Caixa',icon:'¤',permission:'cash.view'},
   {id:'intelligence',label:'Inteligência',icon:'✦',permission:'intelligence.view'},
   {id:'administrative-group',label:'Administrativo',icon:'⚙',children:administrativeNavigationItems},
 ];
 
 function menuAllowed(item) {
-  return item.test ? item.test() : item.permission ? has(item.permission) : true;
+  const allowed = item.test ? item.test() : item.permission ? has(item.permission) : true;
+  return allowed && moduleEnabled(item.id);
 }
+
 function visibleChildren(item) { return (item.children || []).filter(menuAllowed); }
 function routeBelongsToGroup(route, group) { return visibleChildren(group).some(item => item.id === route); }
 
@@ -302,7 +315,9 @@ function navigationDescription(item) {
     bko:'Tratar ativação, biometria e instalação',
     users:'Usuários, cargos e acessos',teams:'Equipes, gestores e metas',plans:'Produtos e ofertas',
     catalogs:'Opções usadas nos formulários',roles:'Limites de cada cargo',audit:'Histórico de alterações',
-    backups:'Proteção do banco de dados',integrations:'Power BI, webhook, WhatsApp e IA'
+    backups:'Proteção do banco de dados',integrations:'Power BI, webhook, WhatsApp e IA',
+    profiles:'Ambientes isolados da plataforma',cash:'Entradas, saídas e saldo',
+    'profile-settings':'Identidade e módulos do perfil atual'
   };
   return descriptions[item.id] || 'Abrir módulo';
 }
@@ -393,12 +408,14 @@ async function renderRoute() {
   $('#content').innerHTML = '<div class="loader">Carregando...</div>';
   try {
     const handlers = {
+      profiles: renderProfiles,
       dashboard: renderDashboard,
       sales: () => renderSales(params),
       'new-sale': () => openSaleForm(null, true),
       bko: renderBko,
       daily: () => renderDaily(params),
       ranking: () => renderRanking(params),
+      cash: renderCash,
       intelligence: renderIntelligence,
       powerbi: renderPowerBI,
       users: renderUsers,
@@ -409,6 +426,7 @@ async function renderRoute() {
       audit: renderAudit,
       backups: renderBackups,
       integrations: renderIntegrations,
+      'profile-settings': renderProfileSettings,
       account: renderAccount,
     };
     if (!handlers[route]) return navigate('dashboard');
@@ -482,6 +500,32 @@ function refreshUserUi() {
   $('#user-name').textContent = visibleName;
   $('#user-role').textContent = state.user.role_name || roleLabel(state.user.role_code);
   $('#user-initials').textContent = initials(visibleName);
+  state.profiles = state.user.profiles || [];
+  const switcher = $('#profile-switcher');
+  if (switcher) {
+    const profile = activeProfile();
+    switcher.classList.remove('hidden');
+    if (isPlatformOwner() && state.profiles.length > 1) {
+      switcher.innerHTML = `<label><span>Perfil</span><select id="profile-select">${state.profiles.map(item=>`<option value="${item.id}" ${String(item.id)===String(profile.id)?'selected':''}>${esc(item.name)}</option>`).join('')}</select></label>`;
+      $('#profile-select').addEventListener('change', async event => {
+        const select = event.currentTarget;
+        select.disabled = true;
+        try {
+          await api('/api/profiles/switch',{method:'POST',body:{profile_id:Number(select.value)}});
+          const bootData = await api('/api/bootstrap');
+          state.user = bootData.user; state.csrf = bootData.csrf_token;
+          state.catalogs={};state.plans=[];state.users=[];state.teams=[];state.roles=[];state.cashTransactions=[];
+          state.profiles = state.user.profiles || [];
+  refreshUserUi();
+          navigate('dashboard');
+          await renderRoute();
+          toast(`Perfil alterado para ${state.user.profile.name}.`);
+        } catch(error) { toast(error.message,'error'); select.disabled=false; }
+      });
+    } else {
+      switcher.innerHTML = `<button type="button" class="profile-chip" ${isPlatformOwner()?'onclick="navigate(\'profiles\')"':''}><small>PERFIL ATUAL</small><strong>${esc(profile.name||'Sem perfil')}</strong></button>`;
+    }
+  }
 }
 
 function showApp() {
@@ -519,7 +563,7 @@ $('#login-form').addEventListener('submit', async event => {
     state.csrf = data.csrf_token;
     const bootData = await api('/api/bootstrap');
     state.user = bootData.user; state.csrf = bootData.csrf_token;
-    state.catalogs={};state.plans=[];state.users=[];state.teams=[];
+    state.catalogs={};state.plans=[];state.users=[];state.teams=[];state.roles=[];state.cashTransactions=[];state.profiles=state.user.profiles||[];
     showApp();
   } catch(error) { toast(error.message,'error'); }
   finally { button.disabled = false; }
@@ -548,11 +592,26 @@ function openGlobalSearch() {
 }
 
 async function renderDashboard() {
-  setPage('Dashboard','CENTRAL DE OPERAÇÃO');
+  setPage('Dashboard', activeProfile().name ? activeProfile().name.toUpperCase() : 'CENTRAL DE OPERAÇÃO');
   const data = await api('/api/dashboard');
+  const visibleName = state.user.display_name || state.user.name;
+  if (data.profile_type === 'cash_control') {
+    const c = data.cash;
+    $('#content').innerHTML = `
+      <section class="dashboard-hero"><div><p class="eyebrow">CONTROLE FINANCEIRO</p><h1>Olá, ${esc(visibleName)}</h1><p>Saldo e movimentações do perfil ${esc(activeProfile().name||'')}.</p></div><div class="dashboard-hero-actions"><button class="btn primary" id="dashboard-new-cash">＋ Novo lançamento</button><button class="btn" id="dashboard-view-cash">Abrir caixa</button></div></section>
+      <section class="dashboard-metrics">
+        <article class="stat-card compact" style="--accent:var(--green)"><div class="stat-top"><span>Entradas totais</span><span class="stat-icon">＋</span></div><div class="stat-value">${money(c.entries)}</div><div class="stat-note">${money(c.month_entries)} neste mês</div></article>
+        <article class="stat-card compact" style="--accent:var(--red)"><div class="stat-top"><span>Saídas totais</span><span class="stat-icon">−</span></div><div class="stat-value">${money(c.exits)}</div><div class="stat-note">${money(c.month_exits)} neste mês</div></article>
+        <article class="stat-card compact" style="--accent:var(--cyan)"><div class="stat-top"><span>Saldo atual</span><span class="stat-icon">¤</span></div><div class="stat-value">${money(c.balance)}</div><div class="stat-note">Entradas menos saídas</div></article>
+      </section>
+      <section class="panel"><header class="panel-head"><div><h3>Movimentações recentes</h3><small class="muted">Últimos lançamentos do perfil</small></div><button class="btn small" id="cash-open-all">Ver caixa</button></header>${cashTable(data.recent_transactions||[])}</section>`;
+    $('#dashboard-new-cash')?.addEventListener('click',()=>openCashForm());
+    $('#dashboard-view-cash')?.addEventListener('click',()=>navigate('cash'));
+    $('#cash-open-all')?.addEventListener('click',()=>navigate('cash'));
+    return;
+  }
   const c = data.cards;
   const conversion = c.total ? Math.round(c.installed * 100 / c.total) : 0;
-  const visibleName = state.user.display_name || state.user.name;
   const cards = [
     ['Vendas totais',c.total,`${c.today} cadastrada(s) hoje`,'▤','--cyan'],
     ['Instaladas',c.installed,`${conversion}% de conversão`,'✓','--green'],
@@ -563,11 +622,11 @@ async function renderDashboard() {
   ];
   $('#content').innerHTML = `
     <section class="dashboard-hero">
-      <div><p class="eyebrow">PAINEL PRINCIPAL</p><h1>Olá, ${esc(visibleName)}</h1><p>Indicadores essenciais no topo, atalhos ao alcance e menos caça ao número certo.</p></div>
+      <div><p class="eyebrow">PAINEL PRINCIPAL</p><h1>Olá, ${esc(visibleName)}</h1><p>Indicadores do perfil ${esc(activeProfile().name||'')}.</p></div>
       <div class="dashboard-hero-actions">${has('sales.create')?'<button class="btn primary" id="dashboard-new-sale">＋ Nova venda</button>':''}<button class="btn" id="dashboard-view-sales">Ver vendas</button></div>
     </section>
     <section class="dashboard-metrics" aria-label="Indicadores principais">${cards.map(([title,value,note,icon,color])=>`<article class="stat-card compact" style="--accent:var(${color})"><div class="stat-top"><span>${title}</span><span class="stat-icon">${icon}</span></div><div class="stat-value">${value}</div><div class="stat-note">${note}</div></article>`).join('')}</section>
-    <section class="panel dashboard-recent"><header class="panel-head"><div><h3>Vendas recentes</h3><small class="muted">Últimas movimentações no seu alcance</small></div><button class="btn small" onclick="navigate('sales')">Ver todas</button></header>${salesTable(data.recent)}</section>
+    <section class="panel dashboard-recent"><header class="panel-head"><div><h3>Vendas recentes</h3><small class="muted">Últimas movimentações do perfil atual</small></div><button class="btn small" onclick="navigate('sales')">Ver todas</button></header>${salesTable(data.recent)}</section>
     ${data.teams?.length ? `<section class="panel"><header class="panel-head"><div><h3>Desempenho das equipes</h3><small class="muted">Comparação rápida do dia</small></div><button class="btn small ghost" onclick="navigate('daily')">Análise completa</button></header><div class="panel-body dashboard-teams">${data.teams.map(t=>`<article class="team-card"><h4>${esc(t.team_name)}</h4><div class="metric-row"><span>Hoje</span><strong>${t.today}</strong></div><div class="metric-row"><span>Total</span><strong>${t.total}</strong></div><div class="metric-row"><span>Instaladas</span><strong>${t.installed}</strong></div></article>`).join('')}</div></section>`:''}`;
   $('#dashboard-new-sale')?.addEventListener('click',()=>openSaleForm(null,true));
   $('#dashboard-view-sales')?.addEventListener('click',()=>navigate('sales'));
@@ -1058,6 +1117,128 @@ async function renderIntelligence() {
   $$('[data-ai-quick]').forEach(button=>button.addEventListener('click',()=>sendAIQuestion(quickPrompts[Number(button.dataset.aiQuick)])));
 }
 
+
+function profileTypeLabel(code) {
+  return ({internet_sales:'Venda de internet',cash_control:'Controle de caixa',services:'Prestação de serviços'})[code] || code;
+}
+
+async function renderProfiles() {
+  if (!isPlatformOwner()) return navigate('dashboard');
+  setPage('Perfis da plataforma','ADMINISTRAÇÃO GLOBAL');
+  const data = await api('/api/profiles');
+  state.profiles = data.profiles || [];
+  state.profileTemplates = data.templates || [];
+  state.availableContractors = data.available_contractors || [];
+  $('#content').innerHTML = `
+    <div class="page-head"><div><h1>Perfis de negócio</h1><p class="muted">Cada perfil possui dados, usuários, cargos e configurações isolados.</p></div><button class="btn primary" id="new-profile">＋ Novo perfil</button></div>
+    <div class="profile-grid">${state.profiles.map(profile=>`<article class="profile-card ${profile.active?'':'inactive'}">
+      <header><div><span class="profile-type">${esc(profileTypeLabel(profile.business_type))}</span><h3>${esc(profile.name)}</h3></div>${profile.active?badge('Ativo','ok'):badge('Bloqueado','cancelada')}</header>
+      <p>${esc(profile.description||'Sem descrição.')}</p>
+      <div class="profile-metrics"><span><b>${profile.users_count||0}</b> usuários</span><span><b>${profile.modules?.length||0}</b> módulos</span></div>
+      <div class="profile-contractor"><small>Contratante</small><strong>${esc(profile.contractor_name||'Não definido')}</strong></div>
+      <footer><button class="btn small" data-profile-enter="${profile.id}">Entrar</button><button class="btn small ghost" data-profile-edit="${profile.id}">Configurar</button></footer>
+    </article>`).join('')}</div>`;
+  $('#new-profile').addEventListener('click',()=>openProfileForm());
+  $$('[data-profile-enter]').forEach(button=>button.addEventListener('click',()=>switchProfile(Number(button.dataset.profileEnter))));
+  $$('[data-profile-edit]').forEach(button=>button.addEventListener('click',()=>openProfileForm(Number(button.dataset.profileEdit))));
+}
+
+async function switchProfile(profileId) {
+  await api('/api/profiles/switch',{method:'POST',body:{profile_id:profileId}});
+  const data = await api('/api/bootstrap');
+  state.user=data.user;state.csrf=data.csrf_token;state.catalogs={};state.plans=[];state.users=[];state.teams=[];state.roles=[];
+  refreshUserUi(); navigate('dashboard'); await renderRoute();
+}
+
+function profileModuleOptions(selected=[]) {
+  const options = [
+    ['dashboard','Dashboard'],['sales','Vendas'],['bko','Gestão BKO'],['daily','Análise do dia'],['ranking','Ranking'],
+    ['cash','Controle de caixa'],['intelligence','Inteligência'],['powerbi','Power BI'],['users','Funcionários'],['teams','Equipes'],
+    ['plans','Planos'],['catalogs','Catálogos'],['roles','Cargos'],['audit','Auditoria'],['integrations','Integrações']
+  ];
+  const set=new Set(selected);
+  return options.map(([code,label])=>`<label class="permission-check"><input type="checkbox" name="modules" value="${code}" ${set.has(code)?'checked':''}><span>${label}</span></label>`).join('');
+}
+
+function openProfileForm(id=null) {
+  const profile=id?state.profiles.find(item=>item.id===id):null;
+  const template=state.profileTemplates.find(item=>item.code===(profile?.business_type||'internet_sales')) || state.profileTemplates[0] || {modules:[]};
+  const contractors=state.availableContractors||[];
+  modal(id?'Configurar perfil':'Novo perfil',`<form id="profile-form" class="form-grid">
+    <label>Nome do perfil<input name="name" required minlength="3" value="${esc(profile?.name||'')}"></label>
+    <label>Modelo de negócio<select name="business_type" ${id?'disabled':''}>${state.profileTemplates.map(item=>`<option value="${item.code}" ${(profile?.business_type||'internet_sales')===item.code?'selected':''}>${esc(item.name)}</option>`).join('')}</select></label>
+    <label class="full">Descrição<textarea name="description">${esc(profile?.description||'')}</textarea></label>
+    <label>Contratante<select name="contractor_user_id">${optionList(contractors,profile?.contractor_user_id,'Sem contratante')}</select></label>
+    ${id?`<label class="switch-row">Perfil ativo<input type="checkbox" name="active" ${profile.active?'checked':''}></label>`:''}
+    <fieldset class="full permission-group"><legend>Módulos habilitados</legend><div class="permission-grid" id="profile-module-grid">${profileModuleOptions(profile?.modules||template.modules)}</div></fieldset>
+    <div class="full page-actions" style="justify-content:flex-end"><button type="button" class="btn ghost" data-close-modal>Cancelar</button><button class="btn primary">Salvar perfil</button></div>
+  </form>`,{wide:true});
+  $$('[data-close-modal]').forEach(el=>el.addEventListener('click',closeModal));
+  const typeSelect=$('#profile-form [name="business_type"]');
+  typeSelect?.addEventListener('change',()=>{const t=state.profileTemplates.find(item=>item.code===typeSelect.value);$('#profile-module-grid').innerHTML=profileModuleOptions(t?.modules||[]);});
+  $('#profile-form').addEventListener('submit',async event=>{
+    event.preventDefault();
+    const payload=formObject(event.currentTarget);
+    payload.modules=$$('input[name="modules"]:checked',event.currentTarget).map(input=>input.value);
+    payload.contractor_user_id=payload.contractor_user_id?Number(payload.contractor_user_id):null;
+    if(id) payload.business_type=profile.business_type;
+    try {
+      await api(id?`/api/profiles/${id}`:'/api/profiles',{method:id?'PUT':'POST',body:payload});
+      closeModal();toast(id?'Perfil atualizado.':'Perfil criado.');renderProfiles();
+    } catch(error){toast(error.message,'error');}
+  });
+}
+
+async function renderProfileSettings() {
+  setPage('Configurar perfil','AMBIENTE ATUAL');
+  const profile=activeProfile();
+  $('#content').innerHTML=`<div class="page-head"><div><h1>${esc(profile.name||'Perfil')}</h1><p class="muted">O Contratante altera somente o ambiente atual. Outros perfis continuam invisíveis.</p></div></div>
+    <section class="panel"><form id="profile-settings-form" class="form-grid panel-body">
+      <label>Nome do perfil<input name="name" required value="${esc(profile.name||'')}"></label>
+      <label>Tipo<input value="${esc(profileTypeLabel(profile.business_type))}" disabled></label>
+      <label class="full">Descrição<textarea name="description">${esc(profile.description||'')}</textarea></label>
+      <fieldset class="full permission-group"><legend>Módulos do perfil</legend><div class="permission-grid">${profileModuleOptions(profile.modules||[])}</div></fieldset>
+      <div class="full page-actions" style="justify-content:flex-end"><button class="btn primary">Salvar configurações</button></div>
+    </form></section>`;
+  $('#profile-settings-form').addEventListener('submit',async event=>{
+    event.preventDefault();const payload=formObject(event.currentTarget);payload.modules=$$('input[name="modules"]:checked',event.currentTarget).map(input=>input.value);
+    try{await api(`/api/profiles/${profile.id}`,{method:'PUT',body:payload});const data=await api('/api/bootstrap');state.user=data.user;state.csrf=data.csrf_token;refreshUserUi();toast('Perfil atualizado.');renderRoute();}catch(error){toast(error.message,'error');}
+  });
+}
+
+function cashTable(rows) {
+  if(!rows?.length)return '<div class="empty">Nenhum lançamento encontrado.</div>';
+  return `<div class="table-wrap"><table class="data-table"><thead><tr><th>Data</th><th>Tipo</th><th>Categoria</th><th>Descrição</th><th>Valor</th><th></th></tr></thead><tbody>${rows.map(item=>`<tr><td>${fmtDate(item.transaction_date)}</td><td>${item.transaction_type==='entry'?badge('Entrada','ok'):badge('Saída','cancelada')}</td><td>${esc(item.category)}</td><td><div class="cell-main">${esc(item.description)}</div><div class="cell-sub">${esc(item.payment_method||'')}</div></td><td class="money-cell ${item.transaction_type==='entry'?'positive':'negative'}">${item.transaction_type==='entry'?'+':'−'} ${money(item.amount)}</td><td>${has('cash.manage')?`<button class="btn small" data-cash-edit="${item.id}">Editar</button>`:''}</td></tr>`).join('')}</tbody></table></div>`;
+}
+
+async function renderCash() {
+  setPage('Controle de caixa','FINANCEIRO');
+  const data=await api('/api/cash');state.cashTransactions=data.transactions||[];
+  const c=data.summary;
+  $('#content').innerHTML=`<div class="page-head"><div><h1>Caixa</h1><p class="muted">Movimentações exclusivas do perfil ${esc(activeProfile().name||'')}.</p></div>${has('cash.manage')?'<button class="btn primary" id="new-cash">＋ Novo lançamento</button>':''}</div>
+    <section class="dashboard-metrics"><article class="stat-card compact" style="--accent:var(--green)"><div class="stat-top"><span>Entradas</span></div><div class="stat-value">${money(c.entries)}</div></article><article class="stat-card compact" style="--accent:var(--red)"><div class="stat-top"><span>Saídas</span></div><div class="stat-value">${money(c.exits)}</div></article><article class="stat-card compact" style="--accent:var(--cyan)"><div class="stat-top"><span>Saldo</span></div><div class="stat-value">${money(c.balance)}</div></article></section>
+    <section class="panel"><header class="panel-head"><h3>Lançamentos</h3><span class="muted">${state.cashTransactions.length} registro(s)</span></header>${cashTable(state.cashTransactions)}</section>`;
+  $('#new-cash')?.addEventListener('click',()=>openCashForm());
+  $$('[data-cash-edit]').forEach(button=>button.addEventListener('click',()=>openCashForm(Number(button.dataset.cashEdit))));
+}
+
+function openCashForm(id=null) {
+  const item=id?state.cashTransactions.find(row=>row.id===id):{};
+  modal(id?'Editar lançamento':'Novo lançamento',`<form id="cash-form" class="form-grid">
+    <label>Tipo<select name="transaction_type"><option value="entry" ${item?.transaction_type==='entry'?'selected':''}>Entrada</option><option value="exit" ${item?.transaction_type==='exit'?'selected':''}>Saída</option></select></label>
+    <label>Data<input type="date" name="transaction_date" required value="${esc(item?.transaction_date||new Date().toISOString().slice(0,10))}"></label>
+    <label>Categoria<input name="category" required value="${esc(item?.category||'')}"></label>
+    <label>Valor<input name="amount" type="number" min="0.01" step="0.01" required value="${esc(item?.amount||'')}"></label>
+    <label class="full">Descrição<input name="description" required value="${esc(item?.description||'')}"></label>
+    <label>Forma de pagamento<input name="payment_method" value="${esc(item?.payment_method||'')}"></label>
+    ${id?`<label class="switch-row">Lançamento ativo<input type="checkbox" name="active" ${item.active?'checked':''}></label>`:''}
+    <label class="full">Observações<textarea name="notes">${esc(item?.notes||'')}</textarea></label>
+    <div class="full page-actions" style="justify-content:flex-end"><button type="button" class="btn ghost" data-close-modal>Cancelar</button><button class="btn primary">Salvar</button></div>
+  </form>`);
+  $$('[data-close-modal]').forEach(el=>el.addEventListener('click',closeModal));
+  $('#cash-form').addEventListener('submit',async event=>{event.preventDefault();try{await api(id?`/api/cash/${id}`:'/api/cash',{method:id?'PUT':'POST',body:formObject(event.currentTarget)});closeModal();toast('Lançamento salvo.');renderCash();}catch(error){toast(error.message,'error');}});
+}
+
 async function renderPowerBI() {
   setPage('Power BI','RELATÓRIO INCORPORADO');
   const data=await api('/api/powerbi');
@@ -1081,7 +1262,7 @@ async function renderUsers() {
   state.users=u.users;state.teams=t.teams;state.roles=r.roles||[];
   $('#content').innerHTML=`
     <div class="page-head"><div><h1>Funcionários</h1><p class="muted">Cargos controlam o acesso no servidor, não apenas os botões.</p></div>${has('users.manage')?'<button class="btn primary" id="new-user">＋ Novo usuário</button>':''}</div>
-    <section class="panel"><div class="table-wrap"><table class="data-table"><thead><tr><th>Usuário</th><th>Cargo</th><th>Equipe</th><th>Status</th><th>Último acesso</th><th></th></tr></thead><tbody>${state.users.map(u=>`<tr><td><div class="cell-main">${esc(u.name)}</div><div class="cell-sub">${esc(u.email)}</div></td><td>${badge(u.role_name||roleLabel(u.role_code),u.base_role||u.role_code)}</td><td>${esc(u.team_name||'-')}</td><td>${u.active?badge('Ativo','ok'):badge('Bloqueado','cancelada')}</td><td>${fmtDateTime(u.last_login_at)}</td><td>${has('users.manage')?`<button class="btn small" onclick="openUserForm(${u.id})">Editar</button>`:''}</td></tr>`).join('')}</tbody></table></div></section>`;
+    <section class="panel"><div class="table-wrap"><table class="data-table"><thead><tr><th>Usuário</th><th>Cargo</th><th>Equipe</th><th>Status</th><th>Último acesso</th><th></th></tr></thead><tbody>${state.users.map(u=>`<tr><td><div class="cell-main">${esc(u.name)}</div><div class="cell-sub">${esc(u.email)}</div></td><td>${badge(u.role_name||roleLabel(u.role_code),u.base_role||u.role_code)}${u.is_contractor?' <span class="badge violet">Contratante</span>':''}</td><td>${esc(u.team_name||'-')}</td><td>${u.active?badge('Ativo','ok'):badge('Bloqueado','cancelada')}</td><td>${fmtDateTime(u.last_login_at)}</td><td>${has('users.manage')?`<button class="btn small" onclick="openUserForm(${u.id})">Editar</button>`:''}</td></tr>`).join('')}</tbody></table></div></section>`;
   $('#new-user')?.addEventListener('click',()=>openUserForm());
 }
 
@@ -1098,6 +1279,7 @@ function openUserForm(id=null) {
     <label>${id?'Nova senha (opcional)':'Senha inicial'}<input type="password" name="password" ${id?'':'required'} minlength="8"></label>
     <label class="switch-row">Exigir troca de senha<input type="checkbox" name="must_change_password" ${id?'':'checked'}></label>
     ${id?`<label class="switch-row full">Usuário ativo<input type="checkbox" name="active" ${user.active?'checked':''}></label>`:''}
+    ${isPlatformOwner()?`<label class="switch-row full">Responsável Contratante deste perfil<input type="checkbox" name="is_contractor" ${user?.is_contractor?'checked':''}></label>`:''}
     <div class="full page-actions" style="justify-content:flex-end"><button type="button" class="btn ghost" data-close-modal>Cancelar</button><button class="btn primary">Salvar</button></div>
   </form>`);
   $$('[data-close-modal]').forEach(el=>el.addEventListener('click',closeModal));

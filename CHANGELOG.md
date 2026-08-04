@@ -1,5 +1,19 @@
 # Changelog
 
+## 2.0.0-beta.1 · Perfis de negócio isolados
+
+- Adicionado painel **Perfis** exclusivo para o Dono da Plataforma.
+- Dono pode criar, configurar, ativar, desativar e alternar entre perfis.
+- Adicionado cargo operacional **Contratante**, limitado ao perfil pelo qual é responsável.
+- Usuários, equipes, cargos, planos, catálogos, vendas, auditoria, integrações e IA agora são isolados por perfil.
+- O banco existente é migrado automaticamente para o perfil inicial **Operação principal**.
+- Adicionados modelos de perfil: Venda de internet, Controle de caixa e Prestação de serviços.
+- Adicionado módulo inicial de Controle de Caixa com entradas, saídas, saldo, categorias e histórico.
+- Inteligência artificial e webhooks passaram a respeitar o perfil ativo.
+- Adicionado seletor de perfil no cabeçalho para o Dono.
+- Adicionado teste automático de isolamento entre perfis e permissões do Contratante.
+- Mantida compatibilidade com o Volume e o banco SQLite existente no Railway.
+
 ## 1.9.0-beta.1
 
 - Adicionado GroqCloud como provedor principal de IA.
