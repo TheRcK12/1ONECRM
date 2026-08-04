@@ -311,3 +311,8 @@ html[data-theme="light"] .auth-footer{border-top-color:#dce7ea;color:#7c9096}
 .profile-contractor{display:grid;gap:3px}.profile-contractor small{color:var(--muted);text-transform:uppercase;font-size:10px;letter-spacing:.08em}.profile-contractor strong{font-weight:600}
 .money-cell{font-weight:650;white-space:nowrap}.money-cell.positive{color:var(--green)}.money-cell.negative{color:var(--red)}
 @media(max-width:980px){.profile-switcher{order:3;width:100%}.profile-switcher select,.profile-chip{width:100%;min-width:0}.top-actions{flex-wrap:wrap}}
+
+
+/* ONE CRM 2.0.1 · Contratante somente leitura */
+.read-only-value{margin-top:7px;padding:12px 14px;border:1px solid var(--border);border-radius:10px;background:var(--surface-2);min-height:44px;white-space:pre-wrap}
+.profile-module-summary{display:flex;flex-wrap:wrap;gap:8px;margin-top:9px}

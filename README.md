@@ -1,6 +1,6 @@
 # ONE CRM 2.0 · Perfis de negócio
 
-O ONE CRM agora aceita ambientes de negócio isolados dentro da mesma instalação. O **Dono da Plataforma** administra todos os perfis; cada **Contratante** administra somente o próprio perfil.
+O ONE CRM agora aceita ambientes de negócio isolados dentro da mesma instalação. O **Dono da Plataforma** administra todos os perfis; cada **Contratante** possui visão administrativa somente leitura do próprio perfil.
 
 ## Perfis disponíveis
 

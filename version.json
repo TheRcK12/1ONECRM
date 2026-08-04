@@ -1,6 +1,6 @@
 {
   "name": "ONE CRM",
-  "version": "2.0.0-beta.1",
+  "version": "2.0.1-beta.1",
   "channel": "beta-online",
-  "description": "Perfis de negócio isolados, Contratantes e módulo inicial de controle de caixa"
+  "description": "Perfis isolados com Contratante administrativo somente leitura"
 }

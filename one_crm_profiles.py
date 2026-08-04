@@ -50,20 +50,23 @@ PROFILE_TEMPLATES: dict[str, dict[str, Any]] = {
     },
 }
 
+# O Contratante funciona como administrador de visualização do perfil.
+# Ele enxerga todos os dados permitidos no próprio ambiente, mas não cria,
+# edita, exclui, trata ou configura registros.
 PROFILE_CONTRACTOR_PERMISSIONS = {
+    "profile.view",
     "dashboard.view",
-    "sales.own", "sales.all", "sales.create", "sales.edit_own", "sales.edit_all",
-    "workflow.bko", "workflow.assign",
-    "ranking.own", "ranking.all", "daily.view",
-    "users.view", "users.manage", "teams.view", "teams.manage",
-    "plans.manage", "catalogs.manage", "roles.manage", "audit.view",
-    "intelligence.view", "ai.use", "powerbi.view", "integrations.manage",
-    "export.data", "profile.configure", "cash.view", "cash.manage",
+    "sales.all",
+    "ranking.all", "daily.view",
+    "users.view", "teams.view",
+    "plans.view", "catalogs.view", "roles.view", "audit.view",
+    "intelligence.view", "ai.use", "powerbi.view", "integrations.view",
+    "cash.view",
 }
 
 PROFILE_ADMIN_PERMISSIONS = {
     "users.manage", "teams.manage", "plans.manage", "catalogs.manage",
-    "roles.manage", "integrations.manage", "profile.configure",
+    "roles.manage", "integrations.manage",
 }
 
 REQUEST_CONTEXT = threading.local()
@@ -109,7 +112,11 @@ def install_profiles(ns: dict[str, Any]) -> None:
 
     # Permissões novas são acrescentadas antes de init_database() chamar seed_database().
     extra_permissions = [
-        ("profile.configure", "Perfil", "Configurar o próprio perfil de negócio"),
+        ("profile.view", "Perfil", "Visualizar a identidade e os módulos do perfil atual"),
+        ("plans.view", "Cadastros", "Visualizar planos e serviços"),
+        ("catalogs.view", "Cadastros", "Visualizar opções e status"),
+        ("roles.view", "Segurança", "Visualizar cargos e permissões"),
+        ("integrations.view", "Sistema", "Visualizar o estado das integrações"),
         ("cash.view", "Caixa", "Visualizar lançamentos e saldo do caixa"),
         ("cash.manage", "Caixa", "Criar e editar lançamentos do caixa"),
     ]
@@ -269,6 +276,11 @@ def install_profiles(ns: dict[str, Any]) -> None:
             conn.execute("CREATE INDEX IF NOT EXISTS idx_roles_profile ON roles(profile_id)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_audit_profile ON audit_logs(profile_id)")
 
+            # Permissão legada removida: desde a 2.0.1 somente o Dono da
+            # Plataforma pode alterar a identidade e os módulos de um perfil.
+            conn.execute("DELETE FROM role_permissions WHERE permission_code='profile.configure'")
+            conn.execute("DELETE FROM permissions WHERE code='profile.configure'")
+
     def init_database() -> None:
         original_init_database()
         ensure_profile_schema()
@@ -425,9 +437,13 @@ def install_profiles(ns: dict[str, Any]) -> None:
             user["team_id"] = member.get("team_id")
             user["team_name"] = member.get("membership_team_name")
             user["is_contractor"] = bool(member.get("is_contractor"))
-            permissions = set(original_get_role_permissions(effective))
             if user["is_contractor"]:
-                permissions.update(PROFILE_CONTRACTOR_PERMISSIONS)
+                # O vínculo continua baseado em manager para compatibilidade,
+                # mas as permissões efetivas são exclusivamente de leitura.
+                permissions = set(PROFILE_CONTRACTOR_PERMISSIONS)
+                user["role_name"] = "Contratante"
+            else:
+                permissions = set(original_get_role_permissions(effective))
             user["permissions"] = sorted(permissions)
         profile_dict = dict(profile)
         user["profile_id"] = profile_id
@@ -460,10 +476,14 @@ def install_profiles(ns: dict[str, Any]) -> None:
         "workflow.bko": "bko", "workflow.assign": "bko",
         "ranking.own": "ranking", "ranking.all": "ranking",
         "daily.view": "daily", "users.view": "users", "users.manage": "users",
-        "teams.view": "teams", "teams.manage": "teams", "plans.manage": "plans",
-        "catalogs.manage": "catalogs", "roles.manage": "roles", "audit.view": "audit",
+        "teams.view": "teams", "teams.manage": "teams",
+        "plans.view": "plans", "plans.manage": "plans",
+        "catalogs.view": "catalogs", "catalogs.manage": "catalogs",
+        "roles.view": "roles", "roles.manage": "roles", "audit.view": "audit",
         "intelligence.view": "intelligence", "ai.use": "intelligence",
-        "powerbi.view": "powerbi", "integrations.manage": "integrations",
+        "powerbi.view": "powerbi",
+        "integrations.view": "integrations", "integrations.manage": "integrations",
+        "profile.view": "users",
         "cash.view": "cash", "cash.manage": "cash",
     }
 
@@ -693,8 +713,8 @@ def install_profiles(ns: dict[str, Any]) -> None:
 
     def api_profile_update_business(self: Any, actor: dict[str, Any], profile_id: int) -> None:
         owner = is_platform_owner(actor)
-        if not owner and (not actor.get("is_contractor") or current_profile_id(actor) != profile_id):
-            raise ApiError(403, "Você só pode configurar o próprio perfil.")
+        if not owner:
+            raise ApiError(403, "Apenas o Dono da Plataforma pode configurar perfis.")
         data = self.read_json()
         with db_connect() as conn:
             current = conn.execute("SELECT * FROM business_profiles WHERE id=?", (profile_id,)).fetchone()
@@ -1020,7 +1040,9 @@ def install_profiles(ns: dict[str, Any]) -> None:
     def api_plans_list(self: Any, query: dict[str, list[str]]) -> None:
         actor, _, _ = self.require_user()
         pid = current_profile_id(actor)
-        include_all = (query.get("all") or [""])[0] == "1" and has_permission(actor, "plans.manage")
+        include_all = (query.get("all") or [""])[0] == "1" and (
+            has_permission(actor, "plans.manage") or has_permission(actor, "plans.view")
+        )
         with db_connect() as conn:
             rows = conn.execute(
                 "SELECT * FROM plans WHERE profile_id=? " + ("" if include_all else "AND active=1 ") + "ORDER BY sort_order,name",
@@ -1075,7 +1097,9 @@ def install_profiles(ns: dict[str, Any]) -> None:
     def api_catalogs(self: Any, query: dict[str, list[str]]) -> None:
         actor, _, _ = self.require_user()
         pid = current_profile_id(actor)
-        include_all = (query.get("all") or [""])[0] == "1" and has_permission(actor, "catalogs.manage")
+        include_all = (query.get("all") or [""])[0] == "1" and (
+            has_permission(actor, "catalogs.manage") or has_permission(actor, "catalogs.view")
+        )
         with db_connect() as conn:
             rows = conn.execute(
                 "SELECT * FROM catalog_items WHERE profile_id=? " + ("" if include_all else "AND active=1 ") + "ORDER BY category,sort_order,label",
@@ -1136,7 +1160,9 @@ def install_profiles(ns: dict[str, Any]) -> None:
 
     # ------------------------- cargos do perfil -------------------------
     def api_roles(self: Any) -> None:
-        actor = self.require_permission("roles.manage")
+        actor, _, _ = self.require_user()
+        if not (has_permission(actor, "roles.manage") or has_permission(actor, "roles.view")):
+            raise ApiError(403, "Sem permissão para visualizar cargos.")
         pid = current_profile_id(actor)
         with db_connect() as conn:
             roles = conn.execute(
@@ -1542,7 +1568,9 @@ def install_profiles(ns: dict[str, Any]) -> None:
         return {row["key"]: dict(row) for row in rows}
 
     def api_integrations_get(self: Any) -> None:
-        actor = self.require_permission("integrations.manage")
+        actor, _, _ = self.require_user()
+        if not (has_permission(actor, "integrations.manage") or has_permission(actor, "integrations.view")):
+            raise ApiError(403, "Sem permissão para visualizar integrações.")
         pid = current_profile_id(actor)
         saved = profile_setting_rows(pid, self.INTEGRATION_KEYS)
         result: dict[str, Any] = {}

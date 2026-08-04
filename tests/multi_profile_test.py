@@ -111,12 +111,32 @@ def main():
         contractor = Client()
         contractor_user = contractor.login("cash@test.local", "Cash12345")
         assert contractor_user["is_contractor"] is True
+        assert contractor_user["role_name"] == "Contratante"
         assert contractor_user["profile"]["id"] == cash_profile
+        assert "cash.view" in contractor_user["permissions"]
+        assert "cash.manage" not in contractor_user["permissions"]
+        assert "profile.view" in contractor_user["permissions"]
+        assert "profile.configure" not in contractor_user["permissions"]
         assert len(contractor.request("/api/profiles")["profiles"]) == 1
         contractor.request("/api/profiles/switch", "POST", {"profile_id": default_profile}, expected=403)
         contractor.request("/api/sales", expected=403)
         assert contractor.request("/api/cash")["summary"]["balance"] == 1250
-        contractor.request(f"/api/profiles/{cash_profile}", "PUT", {"description": "Perfil financeiro isolado"})
+
+        # O Contratante enxerga o ambiente, mas todas as mutações são negadas.
+        contractor.request(f"/api/profiles/{cash_profile}", "PUT", {"description": "Tentativa"}, expected=403)
+        contractor.request("/api/cash", "POST", {
+            "transaction_type": "entry", "category": "Teste", "description": "Não permitido",
+            "amount": 10, "transaction_date": "2026-08-04"
+        }, expected=403)
+        contractor.request("/api/users", "POST", {
+            "name": "Usuário indevido", "email": "blocked@test.local", "password": "Blocked123", "role_code": "seller"
+        }, expected=403)
+        contractor.request("/api/roles", "POST", {
+            "name": "Cargo indevido", "code": "cargo_indevido", "base_role": "seller", "permissions": []
+        }, expected=403)
+        contractor.request("/api/integrations", "PUT", {"ai_provider": "local"}, expected=403)
+        assert contractor.request("/api/roles")["roles"]
+        assert contractor.request("/api/integrations")["ok"] is True
 
         owner.request("/api/profiles/switch", "POST", {"profile_id": default_profile})
         boot = owner.request("/api/bootstrap")

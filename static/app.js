@@ -41,6 +41,7 @@ const fmtDateTime = value => {
 const initials = name => String(name || 'OC').split(/\s+/).slice(0,2).map(x=>x[0]).join('').toUpperCase();
 const has = permission => state.user?.is_platform_owner || baseRole(state.user) === 'owner' || state.user?.permissions?.includes(permission);
 const isPlatformOwner = () => Boolean(state.user?.is_platform_owner);
+const isReadOnlyContractor = () => Boolean(state.user?.is_contractor && !state.user?.is_platform_owner);
 const activeProfile = () => state.user?.profile || {};
 const activeModules = () => new Set(activeProfile().modules || []);
 const routeModuleMap = {dashboard:'dashboard',sales:'sales','new-sale':'sales',bko:'bko',daily:'daily',powerbi:'powerbi',ranking:'ranking',intelligence:'intelligence',users:'users',teams:'teams',plans:'plans',catalogs:'catalogs',roles:'roles',audit:'audit',backups:'backups',integrations:'integrations',cash:'cash','profile-settings':'users'};
@@ -272,15 +273,15 @@ const salesNavigationItems = [
 ];
 
 const administrativeNavigationItems = [
-  {id:'profile-settings',label:'Configurar perfil',icon:'◈',test:()=>isPlatformOwner()||state.user?.is_contractor},
+  {id:'profile-settings',label:'Perfil atual',icon:'◈',test:()=>isPlatformOwner()||has('profile.view')},
   {id:'users',label:'Funcionários',icon:'♙',permission:'users.view'},
   {id:'teams',label:'Equipes',icon:'◫',test:()=>has('teams.view')||has('teams.manage')},
-  {id:'plans',label:'Planos',icon:'▱',permission:'plans.manage'},
-  {id:'catalogs',label:'Catálogos',icon:'⚙',permission:'catalogs.manage'},
-  {id:'roles',label:'Cargos e permissões',icon:'⌘',permission:'roles.manage'},
+  {id:'plans',label:'Planos',icon:'▱',test:()=>has('plans.view')||has('plans.manage')},
+  {id:'catalogs',label:'Catálogos',icon:'⚙',test:()=>has('catalogs.view')||has('catalogs.manage')},
+  {id:'roles',label:'Cargos e permissões',icon:'⌘',test:()=>has('roles.view')||has('roles.manage')},
   {id:'audit',label:'Auditoria',icon:'◷',permission:'audit.view'},
   {id:'backups',label:'Backups',icon:'⇩',permission:'backups.manage'},
-  {id:'integrations',label:'Integrações',icon:'⌁',permission:'integrations.manage'},
+  {id:'integrations',label:'Integrações',icon:'⌁',test:()=>has('integrations.view')||has('integrations.manage')},
 ];
 
 const navigationItems = [
@@ -1122,6 +1123,10 @@ function profileTypeLabel(code) {
   return ({internet_sales:'Venda de internet',cash_control:'Controle de caixa',services:'Prestação de serviços'})[code] || code;
 }
 
+function moduleLabel(module) {
+  return ({dashboard:'Dashboard',sales:'Vendas',bko:'Gestão BKO',daily:'Análise do dia',ranking:'Ranking',intelligence:'Inteligência',powerbi:'Power BI',users:'Funcionários',teams:'Equipes',plans:'Planos',catalogs:'Catálogos',roles:'Cargos e permissões',audit:'Auditoria',integrations:'Integrações',cash:'Controle de caixa'})[module] || module;
+}
+
 async function renderProfiles() {
   if (!isPlatformOwner()) return navigate('dashboard');
   setPage('Perfis da plataforma','ADMINISTRAÇÃO GLOBAL');
@@ -1190,9 +1195,22 @@ function openProfileForm(id=null) {
 }
 
 async function renderProfileSettings() {
-  setPage('Configurar perfil','AMBIENTE ATUAL');
   const profile=activeProfile();
-  $('#content').innerHTML=`<div class="page-head"><div><h1>${esc(profile.name||'Perfil')}</h1><p class="muted">O Contratante altera somente o ambiente atual. Outros perfis continuam invisíveis.</p></div></div>
+  if(!isPlatformOwner()){
+    setPage('Perfil atual','VISUALIZAÇÃO DO AMBIENTE');
+    const modules=profile.modules||[];
+    $('#content').innerHTML=`
+      <div class="page-head"><div><h1>${esc(profile.name||'Perfil')}</h1><p class="muted">O Contratante possui acesso administrativo de visualização. Somente o Dono da Plataforma altera identidade, modelo e módulos.</p></div>${badge('Somente leitura','cyan')}</div>
+      <section class="panel"><div class="panel-body form-grid">
+        <div><small class="muted">Nome do perfil</small><div class="read-only-value">${esc(profile.name||'-')}</div></div>
+        <div><small class="muted">Tipo de negócio</small><div class="read-only-value">${esc(profileTypeLabel(profile.business_type))}</div></div>
+        <div class="full"><small class="muted">Descrição</small><div class="read-only-value">${esc(profile.description||'Sem descrição cadastrada.')}</div></div>
+        <div class="full"><small class="muted">Módulos habilitados</small><div class="profile-module-summary">${modules.length?modules.map(module=>`<span class="badge cyan">${esc(moduleLabel(module))}</span>`).join(''):'<span class="muted">Nenhum módulo informado.</span>'}</div></div>
+      </div></section>`;
+    return;
+  }
+  setPage('Configurar perfil','AMBIENTE ATUAL');
+  $('#content').innerHTML=`<div class="page-head"><div><h1>${esc(profile.name||'Perfil')}</h1><p class="muted">Somente o Dono da Plataforma pode alterar a identidade e os módulos deste ambiente.</p></div></div>
     <section class="panel"><form id="profile-settings-form" class="form-grid panel-body">
       <label>Nome do perfil<input name="name" required value="${esc(profile.name||'')}"></label>
       <label>Tipo<input value="${esc(profileTypeLabel(profile.business_type))}" disabled></label>
@@ -1314,10 +1332,11 @@ async function renderPlans() {
   setPage('Planos','CATÁLOGO COMERCIAL');
   await ensureReferenceData();
   const data=await api('/api/plans?all=1');state.plans=data.plans;
+  const canManage=has('plans.manage');
   $('#content').innerHTML=`
-    <div class="page-head"><div><h1>Planos e serviços</h1><p class="muted">O cadastro alimenta diretamente o formulário de venda.</p></div><button class="btn primary" id="new-plan">＋ Novo plano</button></div>
-    <section class="panel"><div class="table-wrap"><table class="data-table"><thead><tr><th>Plano</th><th>Operadora</th><th>Serviço</th><th>Velocidade</th><th>Preço</th><th>UFs</th><th>Status</th><th></th></tr></thead><tbody>${state.plans.map(p=>`<tr><td><div class="cell-main">${esc(p.name)}</div><div class="cell-sub">${esc(p.benefits||'')}</div></td><td>${esc(p.provider)}</td><td>${esc(p.service)}</td><td>${esc(p.speed||'-')}</td><td>${money(p.price)}</td><td>${esc(p.uf_list||'Todas')}</td><td>${p.active?badge('Ativo','ok'):badge('Inativo','cancelada')}</td><td><button class="btn small" onclick="openPlanForm(${p.id})">Editar</button></td></tr>`).join('')}</tbody></table></div></section>`;
-  $('#new-plan').addEventListener('click',()=>openPlanForm());
+    <div class="page-head"><div><h1>Planos e serviços</h1><p class="muted">${canManage?'O cadastro alimenta diretamente o formulário de venda.':'Visualização dos planos cadastrados no perfil atual.'}</p></div>${canManage?'<button class="btn primary" id="new-plan">＋ Novo plano</button>':badge('Somente leitura','cyan')}</div>
+    <section class="panel"><div class="table-wrap"><table class="data-table"><thead><tr><th>Plano</th><th>Operadora</th><th>Serviço</th><th>Velocidade</th><th>Preço</th><th>UFs</th><th>Status</th>${canManage?'<th></th>':''}</tr></thead><tbody>${state.plans.map(p=>`<tr><td><div class="cell-main">${esc(p.name)}</div><div class="cell-sub">${esc(p.benefits||'')}</div></td><td>${esc(p.provider)}</td><td>${esc(p.service)}</td><td>${esc(p.speed||'-')}</td><td>${money(p.price)}</td><td>${esc(p.uf_list||'Todas')}</td><td>${p.active?badge('Ativo','ok'):badge('Inativo','cancelada')}</td>${canManage?`<td><button class="btn small" onclick="openPlanForm(${p.id})">Editar</button></td>`:''}</tr>`).join('')}</tbody></table></div></section>`;
+  $('#new-plan')?.addEventListener('click',()=>openPlanForm());
 }
 
 function openPlanForm(id=null) {
@@ -1343,10 +1362,11 @@ async function renderCatalogs() {
   setPage('Catálogos','CONFIGURAÇÕES DO SISTEMA');
   const data=await api('/api/catalogs?all=1');state.catalogs=data.catalogs;
   const categories=Object.keys({...categoryLabels,...state.catalogs});
+  const canManage=has('catalogs.manage');
   $('#content').innerHTML=`
-    <div class="page-head"><div><h1>Opções configuráveis</h1><p class="muted">Itens usados em vendas antigas são desativados, não apagados.</p></div><button class="btn primary" id="new-catalog">＋ Novo item</button></div>
-    <div class="grid-2">${categories.map(cat=>`<section class="panel"><header class="panel-head"><h3>${esc(categoryLabels[cat]||cat)}</h3><span class="badge cyan">${(state.catalogs[cat]||[]).length}</span></header><div class="panel-body">${(state.catalogs[cat]||[]).map(i=>`<div class="team-card" style="margin-bottom:8px;display:flex;align-items:center;justify-content:space-between;gap:10px"><div><strong>${esc(i.label)}</strong><div class="code">${esc(i.code)}</div></div><div class="actions">${i.active?badge('Ativo','ok'):badge('Inativo','cancelada')}<button class="btn small" onclick="openCatalogForm(${i.id},'${esc(cat)}')">Editar</button></div></div>`).join('')||'<div class="empty">Sem itens.</div>'}</div></section>`).join('')}</div>`;
-  $('#new-catalog').addEventListener('click',()=>openCatalogForm());
+    <div class="page-head"><div><h1>Opções configuráveis</h1><p class="muted">${canManage?'Itens usados em vendas antigas são desativados, não apagados.':'Visualização dos catálogos e status do perfil atual.'}</p></div>${canManage?'<button class="btn primary" id="new-catalog">＋ Novo item</button>':badge('Somente leitura','cyan')}</div>
+    <div class="grid-2">${categories.map(cat=>`<section class="panel"><header class="panel-head"><h3>${esc(categoryLabels[cat]||cat)}</h3><span class="badge cyan">${(state.catalogs[cat]||[]).length}</span></header><div class="panel-body">${(state.catalogs[cat]||[]).map(i=>`<div class="team-card" style="margin-bottom:8px;display:flex;align-items:center;justify-content:space-between;gap:10px"><div><strong>${esc(i.label)}</strong><div class="code">${esc(i.code)}</div></div><div class="actions">${i.active?badge('Ativo','ok'):badge('Inativo','cancelada')}${canManage?`<button class="btn small" onclick="openCatalogForm(${i.id},'${esc(cat)}')">Editar</button>`:''}</div></div>`).join('')||'<div class="empty">Sem itens.</div>'}</div></section>`).join('')}</div>`;
+  $('#new-catalog')?.addEventListener('click',()=>openCatalogForm());
 }
 function openCatalogForm(id=null,category='') {
   const all=Object.values(state.catalogs).flat();const item=id?all.find(x=>x.id===id):{};
@@ -1368,9 +1388,9 @@ function permissionModules(data=state.roleData) {
   return modules;
 }
 
-function rolePermissionsMarkup(role, modules, prefix='role') {
+function rolePermissionsMarkup(role, modules, prefix='role', readOnly=false) {
   const selected=new Set(role?.permissions||[]);
-  return Object.entries(modules).map(([module,permissions])=>`<div class="permission-module"><h4>${esc(module)}</h4><div class="check-list">${permissions.map(permission=>`<label class="check-item"><input type="checkbox" value="${esc(permission.code)}" ${selected.has(permission.code)?'checked':''}><span>${esc(permission.description)}</span></label>`).join('')}</div></div>`).join('');
+  return Object.entries(modules).map(([module,permissions])=>`<div class="permission-module"><h4>${esc(module)}</h4><div class="check-list">${permissions.map(permission=>`<label class="check-item"><input type="checkbox" value="${esc(permission.code)}" ${selected.has(permission.code)?'checked':''} ${readOnly?'disabled':''}><span>${esc(permission.description)}</span></label>`).join('')}</div></div>`).join('');
 }
 
 async function renderRoles() {
@@ -1378,10 +1398,11 @@ async function renderRoles() {
   const data=await loadRoles();
   const modules=permissionModules(data);
   const editableRoles=data.roles.filter(role=>role.code!=='owner');
+  const canManage=has('roles.manage');
   $('#content').innerHTML=`
-    <div class="page-head"><div><h1>Cargos e permissões</h1><p class="muted">Crie cargos próprios e escolha exatamente o que cada grupo pode acessar. O Dono continua com acesso total.</p></div><button class="btn primary" id="new-role">＋ Novo cargo</button></div>
-    <div class="grid-2">${editableRoles.map(role=>`<section class="panel"><header class="panel-head"><div><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><h3>${esc(role.name)}</h3>${role.is_system?badge('Nativo','cyan'):badge('Personalizado','green')}${role.active?badge('Ativo','ok'):badge('Inativo','cancelada')}</div><p class="muted" style="margin-top:6px">${esc(role.description||'Sem descrição')} · Base: ${esc(nativeRoleLabels[role.base_role]||role.base_role)} · ${role.users_count||0} usuário(s)</p></div><div class="actions">${!role.is_system?`<button class="btn small" onclick="openRoleForm('${esc(role.code)}')">Editar</button>`:''}<button class="btn small primary" onclick="saveRole('${esc(role.code)}')">Salvar permissões</button></div></header><div class="panel-body permission-grid" data-role-box="${esc(role.code)}">${rolePermissionsMarkup(role,modules)}</div></section>`).join('')}</div>`;
-  $('#new-role').addEventListener('click',()=>openRoleForm());
+    <div class="page-head"><div><h1>Cargos e permissões</h1><p class="muted">${canManage?'Crie cargos próprios e escolha exatamente o que cada grupo pode acessar. O Dono continua com acesso total.':'Visualização dos cargos e permissões do perfil atual.'}</p></div>${canManage?'<button class="btn primary" id="new-role">＋ Novo cargo</button>':badge('Somente leitura','cyan')}</div>
+    <div class="grid-2">${editableRoles.map(role=>`<section class="panel"><header class="panel-head"><div><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><h3>${esc(role.name)}</h3>${role.is_system?badge('Nativo','cyan'):badge('Personalizado','green')}${role.active?badge('Ativo','ok'):badge('Inativo','cancelada')}</div><p class="muted" style="margin-top:6px">${esc(role.description||'Sem descrição')} · Base: ${esc(nativeRoleLabels[role.base_role]||role.base_role)} · ${role.users_count||0} usuário(s)</p></div>${canManage?`<div class="actions">${!role.is_system?`<button class="btn small" onclick="openRoleForm('${esc(role.code)}')">Editar</button>`:''}<button class="btn small primary" onclick="saveRole('${esc(role.code)}')">Salvar permissões</button></div>`:''}</header><div class="panel-body permission-grid" data-role-box="${esc(role.code)}">${rolePermissionsMarkup(role,modules,'role',!canManage)}</div></section>`).join('')}</div>`;
+  $('#new-role')?.addEventListener('click',()=>openRoleForm());
 }
 
 async function saveRole(role){
@@ -1463,24 +1484,26 @@ async function renderIntegrations() {
   const openai=i.openai||{};
   const providerEnvironment=Boolean((window.ONE_CRM_AI_PROVIDER_SOURCE||'')==='environment');
   const savedProvider=i.ai_provider?.value||ai.requested_provider||'auto';
+  const canManage=has('integrations.manage');
+  const readOnly=canManage?'':'disabled';
   $('#content').innerHTML=`
-    <div class="page-head"><div><h1>Central de integrações</h1><p class="muted">As chaves ficam apenas no Railway. O navegador recebe somente o estado da configuração.</p></div></div>
+    <div class="page-head"><div><h1>Central de integrações</h1><p class="muted">${canManage?'As chaves ficam apenas no Railway. O navegador recebe somente o estado da configuração.':'Visualização do estado das conexões do perfil atual.'}</p></div>${canManage?'':badge('Somente leitura','cyan')}</div>
     <section class="panel"><header class="panel-head"><h3>Configurações gerais</h3></header><div class="panel-body"><form id="integrations-form" class="form-grid">
-      <label class="full">Power BI Embed URL<input name="powerbi_embed_url" value="${esc(i.powerbi_embed_url.value)}" placeholder="https://app.powerbi.com/view?... "><small class="muted">URL incorporada pronta para uso em relatórios.</small></label>
-      <label class="full">Webhook genérico<input name="generic_webhook_url" value="${esc(i.generic_webhook_url.value)}" placeholder="https://seu-n8n/webhook/one-crm"><small class="muted">Recebe eventos sale.created, sale.updated e sale.workflow_updated.</small></label>
-      <label>Evolution API URL<input name="evolution_api_url" value="${esc(i.evolution_api_url.value)}"></label>
-      <label>Evolution API Key<input name="evolution_api_key" type="password" value="${esc(i.evolution_api_key.value)}"><small class="muted">${i.evolution_api_key.configured?'Já configurada.':''}</small></label>
-      <label class="full">Provedor do ONE Intelligence<select name="ai_provider">
+      <label class="full">Power BI Embed URL<input name="powerbi_embed_url" value="${esc(i.powerbi_embed_url.value)}" ${readOnly} placeholder="https://app.powerbi.com/view?... "><small class="muted">URL incorporada pronta para uso em relatórios.</small></label>
+      <label class="full">Webhook genérico<input name="generic_webhook_url" value="${esc(i.generic_webhook_url.value)}" ${readOnly} placeholder="https://seu-n8n/webhook/one-crm"><small class="muted">Recebe eventos sale.created, sale.updated e sale.workflow_updated.</small></label>
+      <label>Evolution API URL<input name="evolution_api_url" value="${esc(i.evolution_api_url.value)}" ${readOnly}></label>
+      <label>Evolution API Key<input name="evolution_api_key" type="password" value="${esc(i.evolution_api_key.value)}" ${readOnly}><small class="muted">${i.evolution_api_key.configured?'Já configurada.':''}</small></label>
+      <label class="full">Provedor do ONE Intelligence<select name="ai_provider" ${readOnly}>
         <option value="auto" ${savedProvider==='auto'?'selected':''}>Automático: Groq → OpenAI → Local</option>
         <option value="groq" ${savedProvider==='groq'?'selected':''}>GroqCloud</option>
         <option value="openai" ${savedProvider==='openai'?'selected':''}>OpenAI</option>
         <option value="local" ${savedProvider==='local'?'selected':''}>Somente análise local</option>
       </select><small class="muted">A variável ONE_CRM_AI_PROVIDER no Railway, quando definida, tem prioridade sobre esta seleção.</small></label>
-      <label>Modelo Groq<input name="groq_model" value="${esc(i.groq_model.value||groq.model||'llama-3.1-8b-instant')}" ${groq.model_source==='environment'?'disabled':''}><small class="muted">${groq.model_source==='environment'?'Controlado por GROQ_MODEL no Railway.':'Recomendado para o plano gratuito: llama-3.1-8b-instant.'}</small></label>
-      <label>Modelo OpenAI<input name="openai_model" value="${esc(i.openai_model.value||openai.model||'gpt-5.6-luna')}" ${openai.model_source==='environment'?'disabled':''}><small class="muted">Opcional; usado somente quando houver chave e saldo.</small></label>
+      <label>Modelo Groq<input name="groq_model" value="${esc(i.groq_model.value||groq.model||'llama-3.1-8b-instant')}" ${(groq.model_source==='environment'||!canManage)?'disabled':''}><small class="muted">${groq.model_source==='environment'?'Controlado por GROQ_MODEL no Railway.':'Recomendado para o plano gratuito: llama-3.1-8b-instant.'}</small></label>
+      <label>Modelo OpenAI<input name="openai_model" value="${esc(i.openai_model.value||openai.model||'gpt-5.6-luna')}" ${(openai.model_source==='environment'||!canManage)?'disabled':''}><small class="muted">Opcional; usado somente quando houver chave e saldo.</small></label>
       <div class="integration-secret-box"><div><strong>Chave GroqCloud</strong><p>${groq.configured?'GROQ_API_KEY foi encontrada no Railway.':'GROQ_API_KEY ainda não foi configurada no Railway.'}</p><small>A chave nunca é salva no SQLite nem volta ao navegador.</small></div>${groq.configured?badge('Configurada','ok'):badge('Ausente','cancelada')}</div>
       <div class="integration-secret-box"><div><strong>Chave OpenAI</strong><p>${openai.configured?'OPENAI_API_KEY foi encontrada no Railway.':'OPENAI_API_KEY é opcional e está ausente.'}</p><small>Pode permanecer desativada enquanto não houver faturamento.</small></div>${openai.configured?badge('Configurada','ok'):badge('Opcional','aguard')}</div>
-      <div class="full page-actions integration-actions"><button type="button" class="btn" id="test-groq" ${groq.configured?'':'disabled'}>Testar Groq</button><button type="button" class="btn" id="test-openai" ${openai.configured?'':'disabled'}>Testar OpenAI</button><button type="button" class="btn" id="test-local">Testar modo local</button><button class="btn primary">Salvar integrações</button></div>
+      ${canManage?`<div class="full page-actions integration-actions"><button type="button" class="btn" id="test-groq" ${groq.configured?'':'disabled'}>Testar Groq</button><button type="button" class="btn" id="test-openai" ${openai.configured?'':'disabled'}>Testar OpenAI</button><button type="button" class="btn" id="test-local">Testar modo local</button><button class="btn primary">Salvar integrações</button></div>`:''}
     </form></div></section>
     <section class="panel"><header class="panel-head"><h3>Estado dos conectores</h3></header><div class="panel-body grid-2">
       <div class="team-card"><h4>Power BI</h4><p>${esc(data.notes.powerbi)}</p>${i.powerbi_embed_url.configured?badge('Configurado','ok'):badge('Não configurado','aguard')}</div>
@@ -1490,7 +1513,7 @@ async function renderIntegrations() {
       <div class="team-card"><h4>GroqCloud</h4><p>${esc(data.notes.groq)}</p>${groq.configured?badge(`Ativo · ${groq.model}`,'ok'):badge('Não configurado','aguard')}</div>
       <div class="team-card"><h4>OpenAI</h4><p>${esc(data.notes.openai)}</p>${openai.configured?badge(`Disponível · ${openai.model}`,'ok'):badge('Opcional','aguard')}</div>
     </div></section>`;
-  $('#integrations-form').addEventListener('submit',async e=>{e.preventDefault();try{const payload=formObject(e.currentTarget);delete payload.openai_api_key;delete payload.groq_api_key;await api('/api/integrations',{method:'PUT',body:payload});toast('Integrações atualizadas.');renderIntegrations();}catch(error){toast(error.message,'error');}});
+  if(canManage) $('#integrations-form').addEventListener('submit',async e=>{e.preventDefault();try{const payload=formObject(e.currentTarget);delete payload.openai_api_key;delete payload.groq_api_key;await api('/api/integrations',{method:'PUT',body:payload});toast('Integrações atualizadas.');renderIntegrations();}catch(error){toast(error.message,'error');}});
   const testProvider=async(button,provider)=>{button.disabled=true;const original=button.textContent;button.textContent='Testando...';try{const result=await api('/api/ai/test',{method:'POST',body:{provider}});toast(`${result.message} Modelo: ${result.model}`);}catch(error){toast(error.message,'error');}finally{button.disabled=false;button.textContent=original;}};
   $('#test-groq')?.addEventListener('click',e=>testProvider(e.currentTarget,'groq'));
   $('#test-openai')?.addEventListener('click',e=>testProvider(e.currentTarget,'openai'));

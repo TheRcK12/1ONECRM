@@ -1,12 +1,16 @@
-ONE CRM 2.0.0-beta.1 - RELATÓRIO DE TESTES
+ONE CRM 2.0.1-beta.1
 
-APROVADOS:
-- Compilação Python: one_crm_server.py, one_crm_ai.py, one_crm_profiles.py
-- Sintaxe JavaScript: static/app.js
-- SMOKE TEST: OK
-- MULTI PROFILE TEST: OK
-- AI PROVIDERS TEST: OK
-- OPENAI INTEGRATION TEST: OK (provedor simulado)
-- ONLINE MODE TEST: OK
+VALIDAÇÕES EXECUTADAS
+- Python compile: OK
+- JavaScript syntax: OK
+- Smoke test: OK
+- Multi profile test: OK
+- AI providers test: OK
+- OpenAI compatibility test: OK
+- Online mode / Railway test: OK
 
-O teste multi-perfil validou criação de perfil, vínculo do Contratante, bloqueio de troca para outro perfil, isolamento de dados e lançamentos de caixa.
+REGRA VALIDADA
+- Dono da Plataforma configura qualquer perfil.
+- Contratante visualiza somente o próprio perfil.
+- Contratante não cria, edita, exclui, trata ou configura registros.
+- Chamadas diretas de escrita pela API retornam HTTP 403.

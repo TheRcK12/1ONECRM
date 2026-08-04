@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.0.1-beta.1 · Contratante somente leitura
+
+- O Contratante passou a atuar como administrador de visualização do próprio perfil.
+- Somente o Dono da Plataforma pode alterar identidade, tipo, módulos ou responsável de um perfil.
+- Removidas do Contratante as permissões de criação, edição, tratamento e configuração.
+- Adicionadas visualizações somente leitura de planos, catálogos, cargos, integrações, usuários, equipes, auditoria, vendas e caixa.
+- O backend rejeita tentativas de alteração mesmo quando a chamada é feita diretamente pela API.
+- O cargo exibido na conta do responsável passa a ser **Contratante**.
+- A permissão legada `profile.configure` é removida automaticamente do banco.
+
 ## 2.0.0-beta.1 · Perfis de negócio isolados
 
 - Adicionado painel **Perfis** exclusivo para o Dono da Plataforma.

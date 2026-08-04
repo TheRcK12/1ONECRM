@@ -15,7 +15,10 @@
 
 - entra diretamente no próprio perfil;
 - não vê a existência dos demais perfis;
-- administra usuários, equipes, cargos, módulos e integrações do próprio perfil;
+- atua como administrador de visualização do ambiente;
+- visualiza vendas, caixa, usuários, equipes, planos, catálogos, cargos, auditoria e integrações liberadas;
+- não cria, edita, exclui, trata ou configura registros;
+- não altera nome, tipo, módulos ou responsável do perfil;
 - não cria Donos nem acessa a administração global;
 - não consegue trocar o `profile_id` pela API.
 
