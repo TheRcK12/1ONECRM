@@ -1,6 +1,6 @@
 {
   "name": "ONE CRM",
-  "version": "2.2.0-beta.1",
+  "version": "2.3.0-beta.1",
   "channel": "beta-online",
-  "description": "Presets completos com abas, cargos, catálogos, serviços e fluxos específicos por segmento."
+  "description": "Presets revisados com formulários próprios, referências entre módulos e isolamento de catálogos e cargos por perfil."
 }

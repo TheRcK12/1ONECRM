@@ -1,0 +1,21 @@
+ONE CRM 2.3.0-beta.1 — RELATÓRIO DE VALIDAÇÃO
+
+Aprovados:
+- Compilação de one_crm_server.py e one_crm_profiles.py
+- Validação sintática de static/app.js
+- SMOKE TEST
+- MULTI PROFILE TEST
+- PRESET ASSETS TEST
+- PRESET INTEGRITY TEST
+- AI PROVIDERS TEST
+- ONLINE MODE TEST
+
+Validações específicas:
+- RH sem campos genéricos de valor/prazo em candidatos
+- Candidato vinculado a vaga aberta já cadastrada
+- Entrevista vinculada a candidato e vaga
+- Referências impedidas entre perfis diferentes
+- Catálogos limitados ao preset do perfil ativo
+- Cargos limitados ao perfil ativo
+- Permissões limitadas aos módulos do preset
+- Relações estruturadas em todos os presets

@@ -119,13 +119,16 @@ def main() -> int:
         properties = owner.request("/api/profile-records?module=properties")
         assert properties["config"]["label"] == "Imóveis"
         assert properties["can_manage"] is True
+        property_type = catalogs["property_type"][0]["code"]
+        transaction_type = catalogs["transaction_type"][0]["code"]
+        property_status = next(item["code"] for item in catalogs["property_status"] if item["label"] == "Disponível")
         owner.request("/api/profile-records", "POST", {
             "module": "properties",
             "title": "Apartamento no Centro",
             "subtitle": "2 quartos",
-            "status": "Disponível",
+            "status": property_status,
             "amount": 350000,
-            "data": {"property_type": "Apartamento", "transaction_type": "Venda"},
+            "data": {"property_type": property_type, "transaction_type": transaction_type, "location": "Centro"},
         }, 201)
         assert owner.request("/api/profile-records?module=properties")["summary"]["total"] == 1
 

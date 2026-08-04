@@ -1,3 +1,13 @@
+# ONE CRM 2.3.0-beta.1
+
+- Revisão completa dos presets e formulários de cada segmento.
+- Campos de prazo e valor aparecem somente quando fazem sentido.
+- RH: candidatos selecionam vagas abertas já cadastradas; entrevistas selecionam candidato e vaga.
+- Relações entre clientes, ordens, imóveis, propostas, projetos, devedores e demais registros agora usam seletores.
+- Catálogos exibem somente categorias do perfil ativo.
+- Cargos exibem somente cargos do perfil ativo e permissões relacionadas aos módulos habilitados.
+- Validação no backend impede referências, planos e opções de catálogo de outro perfil.
+
 # Changelog
 
 ## 2.0.1-beta.1 · Contratante somente leitura

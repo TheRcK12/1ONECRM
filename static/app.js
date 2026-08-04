@@ -10,6 +10,7 @@ const state = {
   users: [],
   teams: [],
   roles: [],
+  baseRoles: [],
   roleData: null,
   currentSales: [],
   currentSale: null,
@@ -23,6 +24,7 @@ const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
 const esc = (value) => String(value ?? '').replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
 const nativeRoleLabels = {owner:'Dono',manager:'Gerente',bko:'BKO',seller:'Vendedor'};
+const baseRoleTypeLabels = {manager:'Gestão',bko:'Suporte / apoio',seller:'Operação principal'};
 const roleLabel = role => state.roles.find(item=>item.code===role)?.name || nativeRoleLabels[role] || role;
 const baseRole = user => user?.base_role || state.roles.find(item=>item.code===user?.role_code)?.base_role || user?.role_code || 'seller';
 const money = value => Number(value || 0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
@@ -545,7 +547,7 @@ function refreshUserUi() {
           await api('/api/profiles/switch',{method:'POST',body:{profile_id:Number(select.value)}});
           const bootData = await api('/api/bootstrap');
           state.user = bootData.user; state.csrf = bootData.csrf_token;
-          state.catalogs={};state.plans=[];state.users=[];state.teams=[];state.roles=[];state.cashTransactions=[];
+          state.catalogs={};state.plans=[];state.users=[];state.teams=[];state.roles=[];state.baseRoles=[];state.cashTransactions=[];
           state.profiles = state.user.profiles || [];
   refreshUserUi();
           navigate('dashboard');
@@ -594,7 +596,7 @@ $('#login-form').addEventListener('submit', async event => {
     state.csrf = data.csrf_token;
     const bootData = await api('/api/bootstrap');
     state.user = bootData.user; state.csrf = bootData.csrf_token;
-    state.catalogs={};state.plans=[];state.users=[];state.teams=[];state.roles=[];state.cashTransactions=[];state.profiles=state.user.profiles||[];
+    state.catalogs={};state.plans=[];state.users=[];state.teams=[];state.roles=[];state.baseRoles=[];state.cashTransactions=[];state.profiles=state.user.profiles||[];
     showApp();
   } catch(error) { toast(error.message,'error'); }
   finally { button.disabled = false; }
@@ -1219,7 +1221,7 @@ async function renderProfiles() {
 async function switchProfile(profileId) {
   await api('/api/profiles/switch',{method:'POST',body:{profile_id:profileId}});
   const data = await api('/api/bootstrap');
-  state.user=data.user;state.csrf=data.csrf_token;state.catalogs={};state.plans=[];state.users=[];state.teams=[];state.roles=[];
+  state.user=data.user;state.csrf=data.csrf_token;state.catalogs={};state.plans=[];state.users=[];state.teams=[];state.roles=[];state.baseRoles=[];
   refreshUserUi(); navigate('dashboard'); await renderRoute();
 }
 
@@ -1310,22 +1312,69 @@ function recordStatusLabel(config, value) {
   const item = (state.catalogs?.[category] || []).find(item => String(item.code) === String(value));
   return item?.label || String(value).replace(/^p\d+_/,'').replaceAll('_',' ');
 }
+function recordUsesDue(config){return Boolean(config&&config.due_label!==false&&config.due_label);}
+function recordUsesAmount(config){return Boolean(config&&config.amount_label!==false&&config.amount_label);}
+function recordAmountText(config,value){
+  const number=Number(value||0);
+  if(!number)return '-';
+  if(config?.amount_format==='number')return number.toLocaleString('pt-BR',{maximumFractionDigits:2});
+  return money(number);
+}
 function genericRecordTable(rows,{compact=false,module=null,config=null,canManage=false}={}) {
   if(!rows?.length)return '<div class="empty">Nenhum registro encontrado.</div>';
-  return `<div class="table-wrap"><table class="data-table"><thead><tr><th>Registro</th><th>Status</th><th>Responsável</th><th>Prazo</th><th>Valor</th>${compact?'':'<th></th>'}</tr></thead><tbody>${rows.map(item=>{
+  const configs=module?[config||activeRecordConfig(module)||{}]:rows.map(item=>activeRecordConfig(item.module_code)||{});
+  const showDue=config?recordUsesDue(config):configs.some(recordUsesDue);
+  const showAmount=config?recordUsesAmount(config):configs.some(recordUsesAmount);
+  const dueHeader=config?.due_label||'Prazo';
+  const amountHeader=config?.amount_label||'Valor';
+  return `<div class="table-wrap"><table class="data-table"><thead><tr><th>Registro</th><th>Status</th><th>Responsável</th>${showDue?`<th>${esc(dueHeader)}</th>`:''}${showAmount?`<th>${esc(amountHeader)}</th>`:''}${compact?'':'<th></th>'}</tr></thead><tbody>${rows.map(item=>{
     const cfg=config||activeRecordConfig(item.module_code)||{};
-    return `<tr><td><div class="cell-main">${esc(item.title)}</div><div class="cell-sub">${esc(item.subtitle||cfg.singular||item.module_code||'')}</div></td><td>${badge(recordStatusLabel(cfg,item.status),item.status)}</td><td>${esc(item.assigned_user_name||'Não definido')}</td><td>${item.due_date?fmtDate(item.due_date):'-'}</td><td>${Number(item.amount||0)?money(item.amount):'-'}</td>${compact?'':`<td>${canManage?`<button class="btn small" data-record-edit="${item.id}">Editar</button>`:''}</td>`}</tr>`;
+    return `<tr><td><div class="cell-main">${esc(item.title)}</div><div class="cell-sub">${esc(item.subtitle||cfg.singular||item.module_code||'')}</div></td><td>${badge(recordStatusLabel(cfg,item.status),item.status)}</td><td>${esc(item.assigned_user_name||'Não definido')}</td>${showDue?`<td>${recordUsesDue(cfg)&&item.due_date?fmtDate(item.due_date):'-'}</td>`:''}${showAmount?`<td>${recordUsesAmount(cfg)?recordAmountText(cfg,item.amount):'-'}</td>`:''}${compact?'':`<td>${canManage?`<button class="btn small" data-record-edit="${item.id}">Editar</button>`:''}</td>`}</tr>`;
   }).join('')}</tbody></table></div>`;
 }
 function recordStatusOptions(config, selected='') {
   if (config?.status_category) return catalogOptions(config.status_category,selected,'Selecione o status');
   return `<option value="">Selecione o status</option>${(config?.status_options||[]).map(item=>`<option value="${esc(item[0])}" ${String(item[0])===String(selected)?'selected':''}>${esc(item[1])}</option>`).join('')}`;
 }
-function recordCustomField(field,value='') {
-  if(field.type==='catalog') return `<label>${esc(field.label)}<select data-record-field="${esc(field.key)}">${catalogOptions(field.category,value,'Selecione...')}</select></label>`;
-  if(field.type==='number') return `<label>${esc(field.label)}<input type="number" step="0.01" data-record-field="${esc(field.key)}" value="${esc(value??'')}"></label>`;
-  if(field.type==='date') return `<label>${esc(field.label)}<input type="date" data-record-field="${esc(field.key)}" value="${esc(value||'')}"></label>`;
-  return `<label>${esc(field.label)}<input data-record-field="${esc(field.key)}" placeholder="${esc(field.placeholder||'')}" value="${esc(value||'')}"></label>`;
+function normalizedStatus(value){return String(value||'').replace(/^p\d+_/,'');}
+function referenceOptionLabel(item){
+  const parts=[item.title];
+  if(item.subtitle)parts.push(item.subtitle);
+  return parts.filter(Boolean).join(' · ');
+}
+function selectValue(value){return value==null?'':String(value);}
+function recordCustomField(field,value='',references={}) {
+  const required=field.required?'required':'';
+  const placeholder=esc(field.placeholder||'');
+  const current=selectValue(value);
+  if(field.type==='catalog') return `<label>${esc(field.label)}<select data-record-field="${esc(field.key)}" ${required}>${catalogOptions(field.category,current,'Selecione...')}</select></label>`;
+  if(field.type==='record'){
+    let rows=references[field.module]||[];
+    if(Array.isArray(field.status_in)&&field.status_in.length){const allowed=new Set(field.status_in.map(String));rows=rows.filter(item=>allowed.has(normalizedStatus(item.status)));}
+    const hasCurrent=rows.some(item=>String(item.id)===current);
+    const legacy=current&&!hasCurrent?`<option value="${esc(current)}" selected>Referência anterior: ${esc(current)}</option>`:'';
+    return `<label>${esc(field.label)}<select data-record-field="${esc(field.key)}" ${required}><option value="">Selecione...</option>${legacy}${rows.map(item=>`<option value="${item.id}" ${String(item.id)===current?'selected':''}>${esc(referenceOptionLabel(item))}</option>`).join('')}</select></label>`;
+  }
+  if(field.type==='plan'){
+    const rows=state.plans||[];const hasCurrent=rows.some(item=>String(item.id)===current);
+    const legacy=current&&!hasCurrent?`<option value="${esc(current)}" selected>Referência anterior: ${esc(current)}</option>`:'';
+    return `<label>${esc(field.label)}<select data-record-field="${esc(field.key)}" ${required}><option value="">Selecione...</option>${legacy}${rows.map(item=>`<option value="${item.id}" ${String(item.id)===current?'selected':''}>${esc(item.name)}${item.service?` · ${esc(item.service)}`:''}</option>`).join('')}</select></label>`;
+  }
+  if(field.type==='textarea') return `<label class="full">${esc(field.label)}<textarea data-record-field="${esc(field.key)}" placeholder="${placeholder}" ${required}>${esc(value||'')}</textarea></label>`;
+  if(field.type==='number') return `<label>${esc(field.label)}<input type="number" step="${esc(field.step??'0.01')}" ${field.min!=null?`min="${esc(field.min)}"`:''} ${field.max!=null?`max="${esc(field.max)}"`:''} data-record-field="${esc(field.key)}" value="${esc(value??'')}" ${required}></label>`;
+  if(field.type==='date') return `<label>${esc(field.label)}<input type="date" data-record-field="${esc(field.key)}" value="${esc(value||'')}" ${required}></label>`;
+  if(field.type==='email') return `<label>${esc(field.label)}<input type="email" data-record-field="${esc(field.key)}" placeholder="${placeholder}" value="${esc(value||'')}" ${required}></label>`;
+  if(field.type==='tel') return `<label>${esc(field.label)}<input type="tel" data-record-field="${esc(field.key)}" placeholder="${placeholder||'(DDD) 90000-0000'}" value="${esc(value||'')}" ${required}></label>`;
+  if(field.type==='url') return `<label>${esc(field.label)}<input type="url" data-record-field="${esc(field.key)}" placeholder="${placeholder||'https://'}" value="${esc(value||'')}" ${required}></label>`;
+  return `<label>${esc(field.label)}<input data-record-field="${esc(field.key)}" placeholder="${placeholder}" value="${esc(value||'')}" ${required}></label>`;
+}
+async function loadRecordReferences(config){
+  const modules=[...new Set((config?.fields||[]).filter(field=>field.type==='record'&&field.module).map(field=>field.module))];
+  const entries=await Promise.all(modules.map(async module=>{
+    try{const data=await api(`/api/profile-records?${qs({module,all:1})}`);return [module,data.records||[]];}
+    catch{return [module,[]];}
+  }));
+  return Object.fromEntries(entries);
 }
 async function renderProfileRecords(module,params=new URLSearchParams()) {
   const config=activeRecordConfig(module);
@@ -1349,15 +1398,21 @@ async function openProfileRecordForm(module,id=null,records=[]) {
   const config=activeRecordConfig(module);
   const item=id?records.find(row=>row.id===id):{};
   const assigned=state.users||[];
+  const references=await loadRecordReferences(config);
+  const showAssigned=config.assigned_label!==false;
+  const showDue=recordUsesDue(config);
+  const showAmount=recordUsesAmount(config);
+  const showSubtitle=config.subtitle_label!==false;
+  const amountType=config.amount_format==='number'?'number':'number';
   modal(id?`Editar ${config.singular}`:`Novo ${config.singular}`,`<form id="profile-record-form" class="form-grid">
     <label class="full">${esc(config.title_label||`Nome/Identificação de ${String(config.singular).toLowerCase()}`)}<input name="title" required value="${esc(item?.title||'')}"></label>
     <label>Status<select name="status">${recordStatusOptions(config,item?.status||'')}</select></label>
-    <label>Responsável<select name="assigned_user_id">${optionList(assigned,item?.assigned_user_id,'Sem responsável')}</select></label>
-    ${config.due_label!==false?`<label>${esc(config.due_label||'Prazo/Data')}<input type="date" name="due_date" value="${esc(item?.due_date||'')}"></label>`:''}
-    ${config.amount_label!==false?`<label>${esc(config.amount_label||'Valor')}<input type="number" min="0" step="0.01" name="amount" value="${esc(item?.amount??'')}"></label>`:''}
-    ${(config.fields||[]).map(field=>recordCustomField(field,item?.data?.[field.key])).join('')}
-    <label class="full">Resumo complementar<input name="subtitle" value="${esc(item?.subtitle||'')}"></label>
-    <label class="full">Observações<textarea name="notes">${esc(item?.notes||'')}</textarea></label>
+    ${showAssigned?`<label>${esc(config.assigned_label||'Responsável')}<select name="assigned_user_id">${optionList(assigned,item?.assigned_user_id,'Sem responsável')}</select></label>`:''}
+    ${showDue?`<label>${esc(config.due_label)}<input type="date" name="due_date" value="${esc(item?.due_date||'')}"></label>`:''}
+    ${showAmount?`<label>${esc(config.amount_label)}<input type="${amountType}" min="0" step="${esc(config.amount_step??'0.01')}" name="amount" value="${esc(item?.amount??'')}"></label>`:''}
+    ${(config.fields||[]).map(field=>recordCustomField(field,item?.data?.[field.key],references)).join('')}
+    ${showSubtitle?`<label class="full">${esc(config.subtitle_label||'Resumo complementar')}<input name="subtitle" value="${esc(item?.subtitle||'')}"></label>`:''}
+    <label class="full">${esc(config.notes_label||'Observações')}<textarea name="notes">${esc(item?.notes||'')}</textarea></label>
     ${id?`<label class="switch-row full">Registro ativo<input type="checkbox" name="active" ${item.active?'checked':''}></label>`:''}
     <div class="full page-actions" style="justify-content:flex-end"><button type="button" class="btn ghost" data-close-modal>Cancelar</button><button class="btn primary">Salvar</button></div>
   </form>`,{wide:true});
@@ -1365,8 +1420,10 @@ async function openProfileRecordForm(module,id=null,records=[]) {
   $('#profile-record-form').addEventListener('submit',async event=>{
     event.preventDefault();const payload=formObject(event.currentTarget);payload.module=module;payload.data={};
     $$('[data-record-field]',event.currentTarget).forEach(input=>payload.data[input.dataset.recordField]=input.value);
-    payload.assigned_user_id=payload.assigned_user_id?Number(payload.assigned_user_id):null;
-    payload.amount=Number(payload.amount||0);
+    payload.assigned_user_id=showAssigned&&payload.assigned_user_id?Number(payload.assigned_user_id):null;
+    payload.amount=showAmount?Number(payload.amount||0):0;
+    if(!showDue)payload.due_date='';
+    if(!showSubtitle)payload.subtitle='';
     try{await api(id?`/api/profile-records/${id}`:'/api/profile-records',{method:id?'PUT':'POST',body:payload});closeModal();toast(`${config.singular} salvo.`);renderProfileRecords(module);}catch(error){toast(error.message,'error');}
   });
 }
@@ -1417,6 +1474,7 @@ async function renderPowerBI() {
 async function loadRoles() {
   const data = await api('/api/roles');
   state.roles = data.roles || [];
+  state.baseRoles = data.base_roles || [];
   state.roleData = data;
   return data;
 }
@@ -1433,8 +1491,10 @@ async function renderUsers() {
 
 function openUserForm(id=null) {
   const user=id?state.users.find(x=>x.id===id):{};
-  const roleOptions=state.roles
-    .filter(role=>role.active || role.code===user?.role_code)
+  const availableRoles=state.roles.filter(role=>role.active || role.code===user?.role_code);
+  const hasCurrentRole=availableRoles.some(role=>role.code===user?.role_code);
+  const legacyCurrent=user?.role_code&&!hasCurrentRole?`<option value="${esc(user.role_code)}" selected>${esc(user.role_name||roleLabel(user.role_code))} (legado)</option>`:'';
+  const roleOptions=legacyCurrent+availableRoles
     .map(role=>`<option value="${esc(role.code)}" ${user?.role_code===role.code?'selected':''}>${esc(role.name)}${role.active?'':' (inativo)'}</option>`).join('');
   modal(id?'Editar usuário':'Novo usuário',`<form id="user-form" class="form-grid">
     <label>Nome<input name="name" required value="${esc(user?.name||'')}"></label>
@@ -1508,7 +1568,13 @@ function openPlanForm(id=null) {
 }
 
 const baseCategoryLabels={provider:'Operadoras',service:'Serviços',sale_status:'Status da venda',activation_status:'Ativação',biometric_status:'Biometria',installation_status:'Instalação',appointment_status:'Agendamento',payment_method:'Formas de pagamento',due_day:'Vencimentos',sales_channel:'Canais de venda',period:'Períodos',property_type:'Tipos de imóvel',cancellation_reason:'Motivos de cancelamento'};
-function currentCategoryLabels(){return {...baseCategoryLabels,...(activePreset().catalog_labels||{})};}
+function humanizeCode(value){return String(value||'').replace(/^p\d+_/,'').replaceAll('_',' ').replace(/\b\w/g,char=>char.toUpperCase());}
+function currentCategoryLabels(){
+  const labels={...(activePreset().catalog_labels||{})};
+  if(activeProfile()?.business_type==='internet_sales')Object.assign(labels,baseCategoryLabels);
+  Object.keys(state.catalogs||{}).forEach(category=>{if(!labels[category])labels[category]=humanizeCode(category);});
+  return labels;
+}
 async function renderCatalogs() {
   setPage('Catálogos','CONFIGURAÇÕES DO SISTEMA');
   const data=await api('/api/catalogs?all=1');state.catalogs=data.catalogs;
@@ -1554,7 +1620,7 @@ async function renderRoles() {
   const canManage=has('roles.manage');
   $('#content').innerHTML=`
     <div class="page-head"><div><h1>Cargos e permissões</h1><p class="muted">${canManage?'Crie cargos próprios e escolha exatamente o que cada grupo pode acessar. O Dono continua com acesso total.':'Visualização dos cargos e permissões do perfil atual.'}</p></div>${canManage?'<button class="btn primary" id="new-role">＋ Novo cargo</button>':badge('Somente leitura','cyan')}</div>
-    <div class="grid-2">${editableRoles.map(role=>`<section class="panel"><header class="panel-head"><div><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><h3>${esc(role.name)}</h3>${role.is_system?badge('Nativo','cyan'):badge('Personalizado','green')}${role.active?badge('Ativo','ok'):badge('Inativo','cancelada')}</div><p class="muted" style="margin-top:6px">${esc(role.description||'Sem descrição')} · Base: ${esc(nativeRoleLabels[role.base_role]||role.base_role)} · ${role.users_count||0} usuário(s)</p></div>${canManage?`<div class="actions">${!role.is_system?`<button class="btn small" onclick="openRoleForm('${esc(role.code)}')">Editar</button>`:''}<button class="btn small primary" onclick="saveRole('${esc(role.code)}')">Salvar permissões</button></div>`:''}</header><div class="panel-body permission-grid" data-role-box="${esc(role.code)}">${rolePermissionsMarkup(role,modules,'role',!canManage)}</div></section>`).join('')}</div>`;
+    <div class="grid-2">${editableRoles.map(role=>`<section class="panel"><header class="panel-head"><div><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><h3>${esc(role.name)}</h3>${role.is_system?badge('Nativo','cyan'):badge('Personalizado','green')}${role.active?badge('Ativo','ok'):badge('Inativo','cancelada')}</div><p class="muted" style="margin-top:6px">${esc(role.description||'Sem descrição')} · Base: ${esc(baseRoleTypeLabels[role.base_role]||role.base_role)} · ${role.users_count||0} usuário(s)</p></div>${canManage?`<div class="actions">${!role.is_system?`<button class="btn small" onclick="openRoleForm('${esc(role.code)}')">Editar</button>`:''}<button class="btn small primary" onclick="saveRole('${esc(role.code)}')">Salvar permissões</button></div>`:''}</header><div class="panel-body permission-grid" data-role-box="${esc(role.code)}">${rolePermissionsMarkup(role,modules,'role',!canManage)}</div></section>`).join('')}</div>`;
   $('#new-role')?.addEventListener('click',()=>openRoleForm());
 }
 
@@ -1574,12 +1640,12 @@ function openRoleForm(code=null){
   if(role?.is_system){toast('Cargos nativos permitem alterar somente as permissões.','error');return;}
   const modules=permissionModules(data);
   const baseCode=role?.base_role||'seller';
-  const baseTemplate=state.roles.find(item=>item.code===baseCode);
+  const baseTemplate=(state.baseRoles||[]).find(item=>item.code===baseCode);
   const formRole=role||{permissions:baseTemplate?.permissions||[]};
   modal(role?'Editar cargo':'Novo cargo',`<form id="role-form" class="form-grid">
     <label>Nome do cargo<input name="name" required minlength="2" value="${esc(role?.name||'')}" placeholder="Ex.: Supervisor"></label>
     <label>Código interno<input name="code" required pattern="[a-z0-9_]+" value="${esc(role?.code||'')}" ${role?'readonly':''} placeholder="supervisor"></label>
-    <label>Cargo-base<select name="base_role" required><option value="seller" ${baseCode==='seller'?'selected':''}>Vendedor</option><option value="bko" ${baseCode==='bko'?'selected':''}>BKO</option><option value="manager" ${baseCode==='manager'?'selected':''}>Gerente</option></select></label>
+    <label>Cargo-base<select name="base_role" required><option value="seller" ${baseCode==='seller'?'selected':''}>Operação principal</option><option value="bko" ${baseCode==='bko'?'selected':''}>Suporte / apoio</option><option value="manager" ${baseCode==='manager'?'selected':''}>Gestão</option></select></label>
     ${role?`<label class="switch-row">Cargo ativo<input type="checkbox" name="active" ${role.active?'checked':''}></label>`:''}
     <label class="full">Descrição<textarea name="description" placeholder="Responsabilidade e objetivo do cargo">${esc(role?.description||'')}</textarea></label>
     <div class="form-section full">Permissões</div>
