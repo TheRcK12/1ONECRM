@@ -1120,7 +1120,24 @@ async function renderIntelligence() {
 
 
 function profileTypeLabel(code) {
-  return ({internet_sales:'Venda de internet',cash_control:'Controle de caixa',services:'Prestação de serviços'})[code] || code;
+  const template = state.profileTemplates?.find(item => item.code === code);
+  if (template?.name) return template.name;
+  return ({
+    internet_sales:'Venda de internet', cash_control:'Controle de caixa', services:'Prestação de serviços',
+    general_crm:'CRM comercial geral', collections:'Cobrança e recuperação', after_sales:'Atendimento e pós-venda',
+    real_estate:'Imobiliária e corretores', retail:'Loja e varejo', consulting:'Consultoria e projetos',
+    recruitment:'Recrutamento e seleção', custom:'Perfil personalizado'
+  })[code] || code;
+}
+
+function profileTemplatePreview(template) {
+  if (!template) return '';
+  const modules = template.modules || [];
+  return `<div class="preset-preview-card">
+    <div class="preset-preview-head"><div><small>Categoria</small><strong>${esc(template.category || 'Perfil')}</strong></div><span class="badge cyan">${modules.length} módulos</span></div>
+    <p>${esc(template.description || '')}</p>
+    <div class="preset-recommended"><small>Indicado para</small><span>${esc(template.recommended_for || 'Operações personalizadas.')}</span></div>
+  </div>`;
 }
 
 function moduleLabel(module) {
@@ -1183,8 +1200,9 @@ function openProfileForm(id=null) {
   const contractors=state.availableContractors||[];
   modal(id?'Configurar perfil':'Novo perfil',`<form id="profile-form" class="form-grid">
     <label>Nome do perfil<input name="name" required minlength="3" value="${esc(profile?.name||'')}"></label>
-    <label>Modelo de negócio<select name="business_type" ${id?'disabled':''}>${state.profileTemplates.map(item=>`<option value="${item.code}" ${(profile?.business_type||'internet_sales')===item.code?'selected':''}>${esc(item.name)}</option>`).join('')}</select></label>
-    <label class="full">Descrição<textarea name="description">${esc(profile?.description||'')}</textarea></label>
+    <label>Preset do perfil<select name="business_type" ${id?'disabled':''}>${state.profileTemplates.map(item=>`<option value="${item.code}" ${(profile?.business_type||'internet_sales')===item.code?'selected':''}>${esc(item.name)}</option>`).join('')}</select></label>
+    <div class="full" id="profile-preset-preview">${profileTemplatePreview(template)}</div>
+    <label class="full">Descrição<textarea name="description" placeholder="Você pode manter a descrição do preset ou escrever uma descrição própria.">${esc(profile?.description||'')}</textarea></label>
     <label>Contratante<select name="contractor_user_id">${optionList(contractors,profile?.contractor_user_id,'Sem contratante')}</select></label>
     ${id?`<label class="switch-row">Perfil ativo<input type="checkbox" name="active" ${profile.active?'checked':''}></label>`:''}
     <fieldset class="full permission-group"><legend>Módulos habilitados</legend><div class="permission-grid" id="profile-module-grid">${profileModuleOptions(profile?.modules||template.modules)}</div></fieldset>
@@ -1192,7 +1210,11 @@ function openProfileForm(id=null) {
   </form>`,{wide:true});
   $$('[data-close-modal]').forEach(el=>el.addEventListener('click',closeModal));
   const typeSelect=$('#profile-form [name="business_type"]');
-  typeSelect?.addEventListener('change',()=>{const t=state.profileTemplates.find(item=>item.code===typeSelect.value);$('#profile-module-grid').innerHTML=profileModuleOptions(t?.modules||[]);});
+  typeSelect?.addEventListener('change',()=>{
+    const t=state.profileTemplates.find(item=>item.code===typeSelect.value);
+    $('#profile-module-grid').innerHTML=profileModuleOptions(t?.modules||[]);
+    $('#profile-preset-preview').innerHTML=profileTemplatePreview(t);
+  });
   $('#profile-form').addEventListener('submit',async event=>{
     event.preventDefault();
     const payload=formObject(event.currentTarget);

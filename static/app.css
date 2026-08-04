@@ -316,3 +316,5 @@ html[data-theme="light"] .auth-footer{border-top-color:#dce7ea;color:#7c9096}
 /* ONE CRM 2.0.1 · Contratante somente leitura */
 .read-only-value{margin-top:7px;padding:12px 14px;border:1px solid var(--border);border-radius:10px;background:var(--surface-2);min-height:44px;white-space:pre-wrap}
 .profile-module-summary{display:flex;flex-wrap:wrap;gap:8px;margin-top:9px}
+
+.preset-preview-card{display:grid;gap:10px;padding:15px 16px;border:1px solid var(--line);border-radius:12px;background:linear-gradient(135deg,rgba(10,28,35,.82),rgba(12,22,28,.58))}.preset-preview-head{display:flex;align-items:center;justify-content:space-between;gap:12px}.preset-preview-head>div{display:grid;gap:3px}.preset-preview-head small,.preset-recommended small{color:#7f989f;text-transform:uppercase;letter-spacing:.08em;font-size:10px}.preset-preview-head strong{font-size:15px;color:#eef7f8}.preset-preview-card p{margin:0;color:#b8c9cd;line-height:1.55}.preset-recommended{display:grid;gap:4px;padding-top:9px;border-top:1px solid rgba(108,139,148,.22)}.preset-recommended span{color:#d5e2e4;font-size:13px;line-height:1.45}

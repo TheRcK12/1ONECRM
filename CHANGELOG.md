@@ -137,3 +137,8 @@
 - Teste de conexão na página Integrações.
 - Limite de requisições por usuário e auditoria de uso.
 - Registro somente de metadados técnicos em `ai_usage_logs`.
+
+## 2.1.0-beta.1
+- Adicionados presets de perfis para venda de internet, caixa, serviços, CRM geral, cobrança, pós-venda, imobiliária, varejo, consultoria, recrutamento e perfil personalizado.
+- Cada preset possui categoria, descrição, indicação de uso e módulos recomendados.
+- Criação de perfil ganhou pré-visualização do preset e atualização automática dos módulos.

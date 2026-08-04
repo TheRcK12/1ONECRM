@@ -25,7 +25,9 @@ from typing import Any, Callable
 PROFILE_TEMPLATES: dict[str, dict[str, Any]] = {
     "internet_sales": {
         "name": "Venda de internet",
-        "description": "Operação comercial de internet, BKO, biometria e instalação.",
+        "category": "Comercial",
+        "description": "Operação comercial de internet com planos, BKO, biometria e instalação.",
+        "recommended_for": "Provedores, representantes de fibra, telecom e equipes de vendas externas.",
         "modules": [
             "dashboard", "sales", "bko", "daily", "ranking", "intelligence",
             "powerbi", "users", "teams", "plans", "catalogs", "roles",
@@ -34,7 +36,9 @@ PROFILE_TEMPLATES: dict[str, dict[str, Any]] = {
     },
     "cash_control": {
         "name": "Controle de caixa",
-        "description": "Entradas, saídas, saldo, categorias e fechamento financeiro.",
+        "category": "Financeiro",
+        "description": "Entradas, saídas, saldo, categorias e acompanhamento financeiro do perfil.",
+        "recommended_for": "Pequenos negócios, departamentos financeiros, condomínios e operações internas.",
         "modules": [
             "dashboard", "cash", "intelligence", "users", "roles", "audit",
             "integrations",
@@ -42,11 +46,90 @@ PROFILE_TEMPLATES: dict[str, dict[str, Any]] = {
     },
     "services": {
         "name": "Prestação de serviços",
-        "description": "CRM genérico para clientes, tarefas, equipes e acompanhamento.",
+        "category": "Operacional",
+        "description": "Acompanhamento de clientes, equipes, tarefas comerciais e execução de serviços.",
+        "recommended_for": "Assistência técnica, manutenção, instalação, limpeza e prestadores em geral.",
         "modules": [
             "dashboard", "sales", "daily", "intelligence", "users", "teams",
             "catalogs", "roles", "audit", "integrations",
         ],
+    },
+    "general_crm": {
+        "name": "CRM comercial geral",
+        "category": "Comercial",
+        "description": "Estrutura flexível para leads, oportunidades, equipes, metas e acompanhamento de vendas.",
+        "recommended_for": "Empresas que precisam de um CRM comercial sem fluxo específico de telecom.",
+        "modules": [
+            "dashboard", "sales", "daily", "ranking", "intelligence", "users",
+            "teams", "plans", "catalogs", "roles", "audit", "integrations",
+        ],
+    },
+    "collections": {
+        "name": "Cobrança e recuperação",
+        "category": "Financeiro",
+        "description": "Organização de carteiras, contatos, acompanhamento de negociações e resultados por equipe.",
+        "recommended_for": "Cobrança interna, recuperação de crédito e equipes de negociação.",
+        "modules": [
+            "dashboard", "sales", "daily", "ranking", "intelligence", "users",
+            "teams", "catalogs", "roles", "audit", "integrations",
+        ],
+    },
+    "after_sales": {
+        "name": "Atendimento e pós-venda",
+        "category": "Relacionamento",
+        "description": "Controle de solicitações, acompanhamento de clientes e indicadores de atendimento.",
+        "recommended_for": "Suporte, retenção, sucesso do cliente e acompanhamento pós-venda.",
+        "modules": [
+            "dashboard", "sales", "daily", "intelligence", "users", "teams",
+            "catalogs", "roles", "audit", "integrations",
+        ],
+    },
+    "real_estate": {
+        "name": "Imobiliária e corretores",
+        "category": "Comercial",
+        "description": "Gestão comercial de interessados, imóveis, visitas, propostas e desempenho de corretores.",
+        "recommended_for": "Imobiliárias, corretores autônomos e equipes de lançamentos imobiliários.",
+        "modules": [
+            "dashboard", "sales", "daily", "ranking", "intelligence", "users",
+            "teams", "plans", "catalogs", "roles", "audit", "integrations",
+        ],
+    },
+    "retail": {
+        "name": "Loja e varejo",
+        "category": "Comercial e financeiro",
+        "description": "Acompanhamento de vendas, caixa, equipe, produtos cadastrados e desempenho operacional.",
+        "recommended_for": "Lojas físicas, pequenos varejos, quiosques e operações comerciais enxutas.",
+        "modules": [
+            "dashboard", "sales", "cash", "daily", "ranking", "intelligence",
+            "users", "teams", "plans", "catalogs", "roles", "audit", "integrations",
+        ],
+    },
+    "consulting": {
+        "name": "Consultoria e projetos",
+        "category": "Serviços",
+        "description": "Controle de clientes, propostas, entregas, equipes e acompanhamento gerencial.",
+        "recommended_for": "Consultorias, agências, escritórios e empresas de projetos sob demanda.",
+        "modules": [
+            "dashboard", "sales", "daily", "intelligence", "users", "teams",
+            "plans", "catalogs", "roles", "audit", "integrations",
+        ],
+    },
+    "recruitment": {
+        "name": "Recrutamento e seleção",
+        "category": "Pessoas",
+        "description": "Organização de candidatos, vagas, etapas, equipes e indicadores de contratação.",
+        "recommended_for": "RH interno, consultorias de recrutamento e seleção de alto volume.",
+        "modules": [
+            "dashboard", "sales", "daily", "intelligence", "users", "teams",
+            "catalogs", "roles", "audit", "integrations",
+        ],
+    },
+    "custom": {
+        "name": "Perfil personalizado",
+        "category": "Personalizado",
+        "description": "Estrutura mínima para montar um perfil escolhendo manualmente os módulos necessários.",
+        "recommended_for": "Operações que não se encaixam nos modelos prontos ou precisam começar do zero.",
+        "modules": ["dashboard", "users", "roles", "audit"],
     },
 }
 
