@@ -22,116 +22,1452 @@ from datetime import date
 from typing import Any, Callable
 
 
-PROFILE_TEMPLATES: dict[str, dict[str, Any]] = {
-    "internet_sales": {
-        "name": "Venda de internet",
-        "category": "Comercial",
-        "description": "Operação comercial de internet com planos, BKO, biometria e instalação.",
-        "recommended_for": "Provedores, representantes de fibra, telecom e equipes de vendas externas.",
-        "modules": [
-            "dashboard", "sales", "bko", "daily", "ranking", "intelligence",
-            "powerbi", "users", "teams", "plans", "catalogs", "roles",
-            "audit", "integrations",
-        ],
-    },
-    "cash_control": {
-        "name": "Controle de caixa",
-        "category": "Financeiro",
-        "description": "Entradas, saídas, saldo, categorias e acompanhamento financeiro do perfil.",
-        "recommended_for": "Pequenos negócios, departamentos financeiros, condomínios e operações internas.",
-        "modules": [
-            "dashboard", "cash", "intelligence", "users", "roles", "audit",
-            "integrations",
-        ],
-    },
-    "services": {
-        "name": "Prestação de serviços",
-        "category": "Operacional",
-        "description": "Acompanhamento de clientes, equipes, tarefas comerciais e execução de serviços.",
-        "recommended_for": "Assistência técnica, manutenção, instalação, limpeza e prestadores em geral.",
-        "modules": [
-            "dashboard", "sales", "daily", "intelligence", "users", "teams",
-            "catalogs", "roles", "audit", "integrations",
-        ],
-    },
-    "general_crm": {
-        "name": "CRM comercial geral",
-        "category": "Comercial",
-        "description": "Estrutura flexível para leads, oportunidades, equipes, metas e acompanhamento de vendas.",
-        "recommended_for": "Empresas que precisam de um CRM comercial sem fluxo específico de telecom.",
-        "modules": [
-            "dashboard", "sales", "daily", "ranking", "intelligence", "users",
-            "teams", "plans", "catalogs", "roles", "audit", "integrations",
-        ],
-    },
-    "collections": {
-        "name": "Cobrança e recuperação",
-        "category": "Financeiro",
-        "description": "Organização de carteiras, contatos, acompanhamento de negociações e resultados por equipe.",
-        "recommended_for": "Cobrança interna, recuperação de crédito e equipes de negociação.",
-        "modules": [
-            "dashboard", "sales", "daily", "ranking", "intelligence", "users",
-            "teams", "catalogs", "roles", "audit", "integrations",
-        ],
-    },
-    "after_sales": {
-        "name": "Atendimento e pós-venda",
-        "category": "Relacionamento",
-        "description": "Controle de solicitações, acompanhamento de clientes e indicadores de atendimento.",
-        "recommended_for": "Suporte, retenção, sucesso do cliente e acompanhamento pós-venda.",
-        "modules": [
-            "dashboard", "sales", "daily", "intelligence", "users", "teams",
-            "catalogs", "roles", "audit", "integrations",
-        ],
-    },
-    "real_estate": {
-        "name": "Imobiliária e corretores",
-        "category": "Comercial",
-        "description": "Gestão comercial de interessados, imóveis, visitas, propostas e desempenho de corretores.",
-        "recommended_for": "Imobiliárias, corretores autônomos e equipes de lançamentos imobiliários.",
-        "modules": [
-            "dashboard", "sales", "daily", "ranking", "intelligence", "users",
-            "teams", "plans", "catalogs", "roles", "audit", "integrations",
-        ],
-    },
-    "retail": {
-        "name": "Loja e varejo",
-        "category": "Comercial e financeiro",
-        "description": "Acompanhamento de vendas, caixa, equipe, produtos cadastrados e desempenho operacional.",
-        "recommended_for": "Lojas físicas, pequenos varejos, quiosques e operações comerciais enxutas.",
-        "modules": [
-            "dashboard", "sales", "cash", "daily", "ranking", "intelligence",
-            "users", "teams", "plans", "catalogs", "roles", "audit", "integrations",
-        ],
-    },
-    "consulting": {
-        "name": "Consultoria e projetos",
-        "category": "Serviços",
-        "description": "Controle de clientes, propostas, entregas, equipes e acompanhamento gerencial.",
-        "recommended_for": "Consultorias, agências, escritórios e empresas de projetos sob demanda.",
-        "modules": [
-            "dashboard", "sales", "daily", "intelligence", "users", "teams",
-            "plans", "catalogs", "roles", "audit", "integrations",
-        ],
-    },
-    "recruitment": {
-        "name": "Recrutamento e seleção",
-        "category": "Pessoas",
-        "description": "Organização de candidatos, vagas, etapas, equipes e indicadores de contratação.",
-        "recommended_for": "RH interno, consultorias de recrutamento e seleção de alto volume.",
-        "modules": [
-            "dashboard", "sales", "daily", "intelligence", "users", "teams",
-            "catalogs", "roles", "audit", "integrations",
-        ],
-    },
-    "custom": {
-        "name": "Perfil personalizado",
-        "category": "Personalizado",
-        "description": "Estrutura mínima para montar um perfil escolhendo manualmente os módulos necessários.",
-        "recommended_for": "Operações que não se encaixam nos modelos prontos ou precisam começar do zero.",
-        "modules": ["dashboard", "users", "roles", "audit"],
-    },
-}
+PROFILE_TEMPLATES: dict[str, dict[str, Any]] = {'internet_sales': {'name': 'Venda de internet',
+                    'category': 'Telecom',
+                    'description': 'Operação comercial de internet com planos, BKO, biometria e instalação.',
+                    'recommended_for': 'Provedores, representantes de fibra, telecom e equipes de vendas externas.',
+                    'operation_group_label': 'Vendas',
+                    'modules': ['dashboard',
+                                'sales',
+                                'bko',
+                                'daily',
+                                'ranking',
+                                'intelligence',
+                                'powerbi',
+                                'users',
+                                'teams',
+                                'plans',
+                                'catalogs',
+                                'roles',
+                                'audit',
+                                'integrations'],
+                    'navigation_labels': {'sales-group': 'Vendas',
+                                          'sales': 'Todas as vendas',
+                                          'new-sale': 'Nova venda',
+                                          'bko': 'Gestão BKO',
+                                          'plans': 'Planos'},
+                    'admin_labels': {'plans_title': 'Planos e serviços',
+                                     'plans_singular': 'plano',
+                                     'provider': 'Operadora',
+                                     'service': 'Serviço',
+                                     'attribute': 'Velocidade',
+                                     'coverage': 'UFs disponíveis'},
+                    'roles': [{'code': 'supervisor_comercial',
+                               'name': 'Supervisor comercial',
+                               'base_role': 'manager',
+                               'description': 'Acompanha equipes, vendas e indicadores.',
+                               'permissions': ['dashboard.view',
+                                               'sales.all',
+                                               'sales.create',
+                                               'sales.edit_all',
+                                               'workflow.assign',
+                                               'ranking.all',
+                                               'daily.view',
+                                               'users.view',
+                                               'teams.view',
+                                               'intelligence.view',
+                                               'ai.use',
+                                               'plans.view',
+                                               'catalogs.view']},
+                              {'code': 'consultor_vendas',
+                               'name': 'Consultor de vendas',
+                               'base_role': 'seller',
+                               'description': 'Cadastra e acompanha as próprias vendas.',
+                               'permissions': ['dashboard.view',
+                                               'sales.own',
+                                               'sales.create',
+                                               'sales.edit_own',
+                                               'ranking.own']},
+                              {'code': 'analista_bko',
+                               'name': 'Analista BKO',
+                               'base_role': 'bko',
+                               'description': 'Trata ativação, biometria e instalação.',
+                               'permissions': ['dashboard.view', 'sales.all', 'workflow.bko', 'teams.view']}],
+                    'catalog_labels': {},
+                    'catalogs': {},
+                    'offerings': [],
+                    'records': {}},
+ 'cash_control': {'name': 'Controle de caixa',
+                  'category': 'Financeiro',
+                  'description': 'Entradas, saídas, contas a pagar, contas a receber e acompanhamento financeiro.',
+                  'recommended_for': 'Pequenos negócios, departamentos financeiros, condomínios e operações internas.',
+                  'operation_group_label': 'Financeiro',
+                  'modules': ['dashboard',
+                              'cash',
+                              'accounts_payable',
+                              'accounts_receivable',
+                              'intelligence',
+                              'users',
+                              'roles',
+                              'audit',
+                              'integrations'],
+                  'navigation_labels': {'cash': 'Caixa',
+                                        'accounts_payable': 'Contas a pagar',
+                                        'accounts_receivable': 'Contas a receber'},
+                  'admin_labels': {'plans_title': 'Serviços financeiros',
+                                   'plans_singular': 'serviço',
+                                   'provider': 'Responsável',
+                                   'service': 'Categoria',
+                                   'attribute': 'Referência',
+                                   'coverage': 'Abrangência'},
+                  'roles': [{'code': 'gestor_financeiro',
+                             'name': 'Gestor financeiro',
+                             'base_role': 'manager',
+                             'description': 'Visualiza e administra a operação financeira.',
+                             'permissions': ['dashboard.view',
+                                             'cash.view',
+                                             'cash.manage',
+                                             'accounts_payable.view',
+                                             'accounts_payable.manage',
+                                             'accounts_receivable.view',
+                                             'accounts_receivable.manage',
+                                             'intelligence.view',
+                                             'ai.use',
+                                             'users.view',
+                                             'audit.view']},
+                            {'code': 'operador_caixa',
+                             'name': 'Operador de caixa',
+                             'base_role': 'seller',
+                             'description': 'Registra entradas e saídas do caixa.',
+                             'permissions': ['dashboard.view', 'cash.view', 'cash.manage']},
+                            {'code': 'auditor_financeiro',
+                             'name': 'Auditor financeiro',
+                             'base_role': 'bko',
+                             'description': 'Consulta movimentações e documentos sem alterar.',
+                             'permissions': ['dashboard.view',
+                                             'cash.view',
+                                             'accounts_payable.view',
+                                             'accounts_receivable.view',
+                                             'audit.view']}],
+                  'catalog_labels': {'financial_category': 'Categorias financeiras',
+                                     'payment_method': 'Formas de pagamento',
+                                     'account_status': 'Status financeiro'},
+                  'catalogs': {'financial_category': [('vendas', 'Vendas'),
+                                                      ('fornecedores', 'Fornecedores'),
+                                                      ('folha', 'Folha de pagamento'),
+                                                      ('impostos', 'Impostos'),
+                                                      ('operacional', 'Despesas operacionais')],
+                               'payment_method': [('pix', 'PIX'),
+                                                  ('dinheiro', 'Dinheiro'),
+                                                  ('boleto', 'Boleto'),
+                                                  ('transferencia', 'Transferência'),
+                                                  ('cartao', 'Cartão')],
+                               'account_status': [('pendente', 'Pendente'),
+                                                  ('agendado', 'Agendado'),
+                                                  ('pago', 'Pago'),
+                                                  ('vencido', 'Vencido'),
+                                                  ('cancelado', 'Cancelado')]},
+                  'offerings': [],
+                  'records': {'accounts_payable': {'label': 'Contas a pagar',
+                                                   'singular': 'Conta a pagar',
+                                                   'description': 'Obrigações financeiras e vencimentos.',
+                                                   'status_category': 'account_status',
+                                                   'amount_label': 'Valor',
+                                                   'due_label': 'Vencimento',
+                                                   'fields': [{'key': 'category',
+                                                               'label': 'Categoria',
+                                                               'type': 'catalog',
+                                                               'category': 'financial_category'},
+                                                              {'key': 'document',
+                                                               'label': 'Documento/Referência',
+                                                               'type': 'text',
+                                                               'placeholder': ''},
+                                                              {'key': 'beneficiary',
+                                                               'label': 'Beneficiário',
+                                                               'type': 'text',
+                                                               'placeholder': ''}]},
+                              'accounts_receivable': {'label': 'Contas a receber',
+                                                      'singular': 'Conta a receber',
+                                                      'description': 'Recebimentos previstos e situação de cobrança.',
+                                                      'status_category': 'account_status',
+                                                      'amount_label': 'Valor',
+                                                      'due_label': 'Vencimento',
+                                                      'fields': [{'key': 'category',
+                                                                  'label': 'Categoria',
+                                                                  'type': 'catalog',
+                                                                  'category': 'financial_category'},
+                                                                 {'key': 'document',
+                                                                  'label': 'Documento/Referência',
+                                                                  'type': 'text',
+                                                                  'placeholder': ''},
+                                                                 {'key': 'payer',
+                                                                  'label': 'Pagador',
+                                                                  'type': 'text',
+                                                                  'placeholder': ''}]}}},
+ 'services': {'name': 'Prestação de serviços',
+              'category': 'Operacional',
+              'description': 'Clientes, ordens de serviço, agenda e execução de serviços.',
+              'recommended_for': 'Assistência técnica, manutenção, instalação, limpeza e prestadores em geral.',
+              'operation_group_label': 'Serviços',
+              'modules': ['dashboard',
+                          'clients',
+                          'service_orders',
+                          'schedule',
+                          'daily',
+                          'intelligence',
+                          'users',
+                          'teams',
+                          'services_catalog',
+                          'catalogs',
+                          'roles',
+                          'audit',
+                          'integrations'],
+              'navigation_labels': {'clients': 'Clientes',
+                                    'service_orders': 'Ordens de serviço',
+                                    'schedule': 'Agenda',
+                                    'plans': 'Serviços'},
+              'admin_labels': {'plans_title': 'Serviços oferecidos',
+                               'plans_singular': 'serviço',
+                               'provider': 'Área responsável',
+                               'service': 'Categoria',
+                               'attribute': 'Duração/Referência',
+                               'coverage': 'Regiões atendidas'},
+              'roles': [{'code': 'coordenador_servicos',
+                         'name': 'Coordenador de serviços',
+                         'base_role': 'manager',
+                         'description': 'Distribui ordens e acompanha a execução.',
+                         'permissions': ['dashboard.view',
+                                         'clients.view',
+                                         'clients.manage',
+                                         'service_orders.view',
+                                         'service_orders.manage',
+                                         'schedule.view',
+                                         'schedule.manage',
+                                         'daily.view',
+                                         'users.view',
+                                         'teams.view',
+                                         'plans.view',
+                                         'catalogs.view',
+                                         'intelligence.view',
+                                         'ai.use']},
+                        {'code': 'tecnico',
+                         'name': 'Técnico',
+                         'base_role': 'seller',
+                         'description': 'Visualiza clientes e atualiza suas ordens de serviço.',
+                         'permissions': ['dashboard.view',
+                                         'clients.view',
+                                         'service_orders.view',
+                                         'service_orders.manage',
+                                         'schedule.view']},
+                        {'code': 'atendente_servicos',
+                         'name': 'Atendente',
+                         'base_role': 'bko',
+                         'description': 'Cadastra clientes e agenda atendimentos.',
+                         'permissions': ['dashboard.view',
+                                         'clients.view',
+                                         'clients.manage',
+                                         'service_orders.view',
+                                         'service_orders.manage',
+                                         'schedule.view',
+                                         'schedule.manage']}],
+              'catalog_labels': {'client_type': 'Tipos de cliente',
+                                 'service_order_status': 'Status da ordem',
+                                 'service_priority': 'Prioridades',
+                                 'schedule_status': 'Status da agenda'},
+              'catalogs': {'client_type': [('residencial', 'Residencial'),
+                                           ('comercial', 'Comercial'),
+                                           ('condominio', 'Condomínio')],
+                           'service_order_status': [('aberta', 'Aberta'),
+                                                    ('agendada', 'Agendada'),
+                                                    ('em_execucao', 'Em execução'),
+                                                    ('aguardando_cliente', 'Aguardando cliente'),
+                                                    ('concluida', 'Concluída'),
+                                                    ('cancelada', 'Cancelada')],
+                           'service_priority': [('baixa', 'Baixa'),
+                                                ('normal', 'Normal'),
+                                                ('alta', 'Alta'),
+                                                ('urgente', 'Urgente')],
+                           'schedule_status': [('agendado', 'Agendado'),
+                                               ('confirmado', 'Confirmado'),
+                                               ('realizado', 'Realizado'),
+                                               ('reagendado', 'Reagendado'),
+                                               ('cancelado', 'Cancelado')]},
+              'offerings': [{'provider': 'Operação',
+                             'service': 'Manutenção',
+                             'name': 'Visita técnica',
+                             'speed': 'Até 2 horas',
+                             'price': 0,
+                             'benefits': 'Diagnóstico e atendimento técnico'},
+                            {'provider': 'Operação',
+                             'service': 'Instalação',
+                             'name': 'Instalação padrão',
+                             'speed': 'Sob agendamento',
+                             'price': 0,
+                             'benefits': 'Execução conforme escopo'}],
+              'records': {'clients': {'label': 'Clientes',
+                                      'singular': 'Cliente',
+                                      'description': 'Cadastro dos clientes atendidos.',
+                                      'status_options': [('ativo', 'Ativo'),
+                                                         ('inativo', 'Inativo'),
+                                                         ('prospect', 'Prospect')],
+                                      'amount_label': 'Valor acumulado',
+                                      'fields': [{'key': 'client_type',
+                                                  'label': 'Tipo de cliente',
+                                                  'type': 'catalog',
+                                                  'category': 'client_type'},
+                                                 {'key': 'phone',
+                                                  'label': 'Telefone',
+                                                  'type': 'text',
+                                                  'placeholder': ''},
+                                                 {'key': 'email', 'label': 'E-mail', 'type': 'text', 'placeholder': ''},
+                                                 {'key': 'city',
+                                                  'label': 'Cidade',
+                                                  'type': 'text',
+                                                  'placeholder': ''}]},
+                          'service_orders': {'label': 'Ordens de serviço',
+                                             'singular': 'Ordem de serviço',
+                                             'description': 'Solicitações e execução dos serviços.',
+                                             'status_category': 'service_order_status',
+                                             'amount_label': 'Valor do serviço',
+                                             'due_label': 'Data prevista',
+                                             'fields': [{'key': 'priority',
+                                                         'label': 'Prioridade',
+                                                         'type': 'catalog',
+                                                         'category': 'service_priority'},
+                                                        {'key': 'client',
+                                                         'label': 'Cliente',
+                                                         'type': 'text',
+                                                         'placeholder': ''},
+                                                        {'key': 'service',
+                                                         'label': 'Serviço',
+                                                         'type': 'text',
+                                                         'placeholder': ''},
+                                                        {'key': 'address',
+                                                         'label': 'Local do atendimento',
+                                                         'type': 'text',
+                                                         'placeholder': ''}]},
+                          'schedule': {'label': 'Agenda',
+                                       'singular': 'Agendamento',
+                                       'description': 'Agenda de visitas e serviços.',
+                                       'status_category': 'schedule_status',
+                                       'due_label': 'Data do atendimento',
+                                       'fields': [{'key': 'client',
+                                                   'label': 'Cliente',
+                                                   'type': 'text',
+                                                   'placeholder': ''},
+                                                  {'key': 'service',
+                                                   'label': 'Serviço',
+                                                   'type': 'text',
+                                                   'placeholder': ''},
+                                                  {'key': 'period',
+                                                   'label': 'Período',
+                                                   'type': 'text',
+                                                   'placeholder': ''},
+                                                  {'key': 'location',
+                                                   'label': 'Local',
+                                                   'type': 'text',
+                                                   'placeholder': ''}]}}},
+ 'general_crm': {'name': 'CRM comercial geral',
+                 'category': 'Comercial',
+                 'description': 'Leads, oportunidades, tarefas e gestão comercial flexível.',
+                 'recommended_for': 'Empresas que precisam de um CRM comercial sem fluxo específico de telecom.',
+                 'operation_group_label': 'Comercial',
+                 'modules': ['dashboard',
+                             'leads',
+                             'opportunities',
+                             'tasks',
+                             'daily',
+                             'ranking',
+                             'intelligence',
+                             'users',
+                             'teams',
+                             'services_catalog',
+                             'catalogs',
+                             'roles',
+                             'audit',
+                             'integrations'],
+                 'navigation_labels': {'leads': 'Leads',
+                                       'opportunities': 'Oportunidades',
+                                       'tasks': 'Tarefas',
+                                       'plans': 'Produtos e serviços'},
+                 'admin_labels': {'plans_title': 'Produtos e serviços',
+                                  'plans_singular': 'item',
+                                  'provider': 'Marca/Unidade',
+                                  'service': 'Categoria',
+                                  'attribute': 'Referência',
+                                  'coverage': 'Regiões'},
+                 'roles': [{'code': 'gerente_comercial',
+                            'name': 'Gerente comercial',
+                            'base_role': 'manager',
+                            'description': 'Gerencia funil, equipes e indicadores.',
+                            'permissions': ['dashboard.view',
+                                            'leads.view',
+                                            'leads.manage',
+                                            'opportunities.view',
+                                            'opportunities.manage',
+                                            'tasks.view',
+                                            'tasks.manage',
+                                            'daily.view',
+                                            'ranking.all',
+                                            'users.view',
+                                            'teams.view',
+                                            'plans.view',
+                                            'catalogs.view',
+                                            'intelligence.view',
+                                            'ai.use']},
+                           {'code': 'executivo_comercial',
+                            'name': 'Executivo comercial',
+                            'base_role': 'seller',
+                            'description': 'Trabalha leads e oportunidades.',
+                            'permissions': ['dashboard.view',
+                                            'leads.view',
+                                            'leads.manage',
+                                            'opportunities.view',
+                                            'opportunities.manage',
+                                            'tasks.view',
+                                            'tasks.manage',
+                                            'ranking.own']},
+                           {'code': 'pre_vendas',
+                            'name': 'Pré-vendas',
+                            'base_role': 'bko',
+                            'description': 'Qualifica leads e agenda oportunidades.',
+                            'permissions': ['dashboard.view',
+                                            'leads.view',
+                                            'leads.manage',
+                                            'tasks.view',
+                                            'tasks.manage']}],
+                 'catalog_labels': {'lead_status': 'Status do lead',
+                                    'lead_source': 'Origem do lead',
+                                    'opportunity_stage': 'Etapas da oportunidade',
+                                    'task_status': 'Status da tarefa'},
+                 'catalogs': {'lead_status': [('novo', 'Novo'),
+                                              ('contato', 'Em contato'),
+                                              ('qualificado', 'Qualificado'),
+                                              ('descartado', 'Descartado')],
+                              'lead_source': [('indicacao', 'Indicação'),
+                                              ('site', 'Site'),
+                                              ('whatsapp', 'WhatsApp'),
+                                              ('trafego_pago', 'Tráfego pago'),
+                                              ('prospeccao', 'Prospecção')],
+                              'opportunity_stage': [('diagnostico', 'Diagnóstico'),
+                                                    ('proposta', 'Proposta'),
+                                                    ('negociacao', 'Negociação'),
+                                                    ('ganha', 'Ganha'),
+                                                    ('perdida', 'Perdida')],
+                              'task_status': [('pendente', 'Pendente'),
+                                              ('em_andamento', 'Em andamento'),
+                                              ('concluida', 'Concluída'),
+                                              ('cancelada', 'Cancelada')]},
+                 'offerings': [],
+                 'records': {'leads': {'label': 'Leads',
+                                       'singular': 'Lead',
+                                       'description': 'Contatos em prospecção e qualificação.',
+                                       'status_category': 'lead_status',
+                                       'fields': [{'key': 'source',
+                                                   'label': 'Origem',
+                                                   'type': 'catalog',
+                                                   'category': 'lead_source'},
+                                                  {'key': 'phone',
+                                                   'label': 'Telefone',
+                                                   'type': 'text',
+                                                   'placeholder': ''},
+                                                  {'key': 'email',
+                                                   'label': 'E-mail',
+                                                   'type': 'text',
+                                                   'placeholder': ''},
+                                                  {'key': 'company',
+                                                   'label': 'Empresa',
+                                                   'type': 'text',
+                                                   'placeholder': ''}]},
+                             'opportunities': {'label': 'Oportunidades',
+                                               'singular': 'Oportunidade',
+                                               'description': 'Negócios em andamento no funil comercial.',
+                                               'status_category': 'opportunity_stage',
+                                               'amount_label': 'Valor estimado',
+                                               'due_label': 'Previsão de fechamento',
+                                               'fields': [{'key': 'client',
+                                                           'label': 'Cliente',
+                                                           'type': 'text',
+                                                           'placeholder': ''},
+                                                          {'key': 'product',
+                                                           'label': 'Produto/Serviço',
+                                                           'type': 'text',
+                                                           'placeholder': ''},
+                                                          {'key': 'probability',
+                                                           'label': 'Probabilidade (%)',
+                                                           'type': 'number'}]},
+                             'tasks': {'label': 'Tarefas',
+                                       'singular': 'Tarefa',
+                                       'description': 'Atividades e próximos passos da equipe.',
+                                       'status_category': 'task_status',
+                                       'due_label': 'Prazo',
+                                       'fields': [{'key': 'related_to',
+                                                   'label': 'Relacionado a',
+                                                   'type': 'text',
+                                                   'placeholder': ''},
+                                                  {'key': 'priority',
+                                                   'label': 'Prioridade',
+                                                   'type': 'text',
+                                                   'placeholder': ''}]}}},
+ 'collections': {'name': 'Cobrança e recuperação',
+                 'category': 'Financeiro',
+                 'description': 'Carteiras, negociações, acordos e resultados de recuperação.',
+                 'recommended_for': 'Cobrança interna, recuperação de crédito e equipes de negociação.',
+                 'operation_group_label': 'Cobrança',
+                 'modules': ['dashboard',
+                             'debtors',
+                             'negotiations',
+                             'agreements',
+                             'daily',
+                             'ranking',
+                             'intelligence',
+                             'users',
+                             'teams',
+                             'catalogs',
+                             'roles',
+                             'audit',
+                             'integrations'],
+                 'navigation_labels': {'debtors': 'Devedores', 'negotiations': 'Negociações', 'agreements': 'Acordos'},
+                 'roles': [{'code': 'supervisor_cobranca',
+                            'name': 'Supervisor de cobrança',
+                            'base_role': 'manager',
+                            'description': 'Gerencia carteira, equipe e acordos.',
+                            'permissions': ['dashboard.view',
+                                            'debtors.view',
+                                            'debtors.manage',
+                                            'negotiations.view',
+                                            'negotiations.manage',
+                                            'agreements.view',
+                                            'agreements.manage',
+                                            'daily.view',
+                                            'ranking.all',
+                                            'users.view',
+                                            'teams.view',
+                                            'intelligence.view',
+                                            'ai.use']},
+                           {'code': 'negociador',
+                            'name': 'Negociador',
+                            'base_role': 'seller',
+                            'description': 'Realiza contatos e negociações.',
+                            'permissions': ['dashboard.view',
+                                            'debtors.view',
+                                            'negotiations.view',
+                                            'negotiations.manage',
+                                            'agreements.view',
+                                            'ranking.own']},
+                           {'code': 'analista_acordos',
+                            'name': 'Analista de acordos',
+                            'base_role': 'bko',
+                            'description': 'Confere e acompanha acordos firmados.',
+                            'permissions': ['dashboard.view',
+                                            'debtors.view',
+                                            'negotiations.view',
+                                            'agreements.view',
+                                            'agreements.manage']}],
+                 'catalog_labels': {'debtor_status': 'Status da carteira',
+                                    'negotiation_status': 'Status da negociação',
+                                    'agreement_status': 'Status do acordo',
+                                    'contact_result': 'Resultado do contato'},
+                 'catalogs': {'debtor_status': [('novo', 'Novo'),
+                                                ('em_cobranca', 'Em cobrança'),
+                                                ('negociando', 'Negociando'),
+                                                ('regularizado', 'Regularizado'),
+                                                ('incobravel', 'Incobrável')],
+                              'negotiation_status': [('pendente', 'Pendente'),
+                                                     ('promessa', 'Promessa de pagamento'),
+                                                     ('proposta', 'Proposta enviada'),
+                                                     ('sem_acordo', 'Sem acordo'),
+                                                     ('concluida', 'Concluída')],
+                              'agreement_status': [('aguardando', 'Aguardando pagamento'),
+                                                   ('parcial', 'Pagamento parcial'),
+                                                   ('quitado', 'Quitado'),
+                                                   ('quebrado', 'Acordo quebrado')],
+                              'contact_result': [('atendeu', 'Atendeu'),
+                                                 ('nao_atendeu', 'Não atendeu'),
+                                                 ('recado', 'Recado'),
+                                                 ('numero_invalido', 'Número inválido')]},
+                 'offerings': [],
+                 'records': {'debtors': {'label': 'Devedores',
+                                         'singular': 'Devedor',
+                                         'description': 'Pessoas ou empresas da carteira de cobrança.',
+                                         'status_category': 'debtor_status',
+                                         'amount_label': 'Saldo em aberto',
+                                         'fields': [{'key': 'document',
+                                                     'label': 'CPF/CNPJ',
+                                                     'type': 'text',
+                                                     'placeholder': ''},
+                                                    {'key': 'phone',
+                                                     'label': 'Telefone',
+                                                     'type': 'text',
+                                                     'placeholder': ''},
+                                                    {'key': 'portfolio',
+                                                     'label': 'Carteira',
+                                                     'type': 'text',
+                                                     'placeholder': ''}]},
+                             'negotiations': {'label': 'Negociações',
+                                              'singular': 'Negociação',
+                                              'description': 'Histórico de contato e propostas.',
+                                              'status_category': 'negotiation_status',
+                                              'amount_label': 'Valor negociado',
+                                              'due_label': 'Próximo contato',
+                                              'fields': [{'key': 'debtor',
+                                                          'label': 'Devedor',
+                                                          'type': 'text',
+                                                          'placeholder': ''},
+                                                         {'key': 'contact_result',
+                                                          'label': 'Resultado do contato',
+                                                          'type': 'catalog',
+                                                          'category': 'contact_result'},
+                                                         {'key': 'proposal',
+                                                          'label': 'Proposta',
+                                                          'type': 'text',
+                                                          'placeholder': ''}]},
+                             'agreements': {'label': 'Acordos',
+                                            'singular': 'Acordo',
+                                            'description': 'Acordos fechados e acompanhamento de pagamentos.',
+                                            'status_category': 'agreement_status',
+                                            'amount_label': 'Valor do acordo',
+                                            'due_label': 'Vencimento',
+                                            'fields': [{'key': 'debtor',
+                                                        'label': 'Devedor',
+                                                        'type': 'text',
+                                                        'placeholder': ''},
+                                                       {'key': 'installments',
+                                                        'label': 'Parcelas',
+                                                        'type': 'text',
+                                                        'placeholder': ''},
+                                                       {'key': 'payment_method',
+                                                        'label': 'Forma de pagamento',
+                                                        'type': 'text',
+                                                        'placeholder': ''}]}}},
+ 'after_sales': {'name': 'Atendimento e pós-venda',
+                 'category': 'Relacionamento',
+                 'description': 'Clientes, chamados, acompanhamentos e indicadores de atendimento.',
+                 'recommended_for': 'Suporte, retenção, sucesso do cliente e acompanhamento pós-venda.',
+                 'operation_group_label': 'Atendimento',
+                 'modules': ['dashboard',
+                             'customers',
+                             'tickets',
+                             'followups',
+                             'daily',
+                             'intelligence',
+                             'users',
+                             'teams',
+                             'catalogs',
+                             'roles',
+                             'audit',
+                             'integrations'],
+                 'navigation_labels': {'customers': 'Clientes', 'tickets': 'Chamados', 'followups': 'Acompanhamentos'},
+                 'roles': [{'code': 'coordenador_atendimento',
+                            'name': 'Coordenador de atendimento',
+                            'base_role': 'manager',
+                            'description': 'Gerencia filas, equipe e indicadores de atendimento.',
+                            'permissions': ['dashboard.view',
+                                            'customers.view',
+                                            'customers.manage',
+                                            'tickets.view',
+                                            'tickets.manage',
+                                            'followups.view',
+                                            'followups.manage',
+                                            'daily.view',
+                                            'users.view',
+                                            'teams.view',
+                                            'intelligence.view',
+                                            'ai.use']},
+                           {'code': 'analista_suporte',
+                            'name': 'Analista de suporte',
+                            'base_role': 'seller',
+                            'description': 'Atende clientes e atualiza chamados.',
+                            'permissions': ['dashboard.view',
+                                            'customers.view',
+                                            'tickets.view',
+                                            'tickets.manage',
+                                            'followups.view',
+                                            'followups.manage']},
+                           {'code': 'qualidade_atendimento',
+                            'name': 'Qualidade',
+                            'base_role': 'bko',
+                            'description': 'Audita atendimentos e acompanha retorno ao cliente.',
+                            'permissions': ['dashboard.view',
+                                            'customers.view',
+                                            'tickets.view',
+                                            'followups.view',
+                                            'daily.view',
+                                            'audit.view']}],
+                 'catalog_labels': {'customer_status': 'Status do cliente',
+                                    'ticket_status': 'Status do chamado',
+                                    'ticket_priority': 'Prioridade',
+                                    'followup_status': 'Status do acompanhamento'},
+                 'catalogs': {'customer_status': [('ativo', 'Ativo'), ('risco', 'Em risco'), ('inativo', 'Inativo')],
+                              'ticket_status': [('aberto', 'Aberto'),
+                                                ('em_atendimento', 'Em atendimento'),
+                                                ('aguardando_cliente', 'Aguardando cliente'),
+                                                ('resolvido', 'Resolvido'),
+                                                ('cancelado', 'Cancelado')],
+                              'ticket_priority': [('baixa', 'Baixa'),
+                                                  ('normal', 'Normal'),
+                                                  ('alta', 'Alta'),
+                                                  ('critica', 'Crítica')],
+                              'followup_status': [('pendente', 'Pendente'),
+                                                  ('agendado', 'Agendado'),
+                                                  ('realizado', 'Realizado'),
+                                                  ('sem_retorno', 'Sem retorno')]},
+                 'offerings': [],
+                 'records': {'customers': {'label': 'Clientes',
+                                           'singular': 'Cliente',
+                                           'description': 'Base de clientes acompanhados pelo pós-venda.',
+                                           'status_category': 'customer_status',
+                                           'fields': [{'key': 'phone',
+                                                       'label': 'Telefone',
+                                                       'type': 'text',
+                                                       'placeholder': ''},
+                                                      {'key': 'email',
+                                                       'label': 'E-mail',
+                                                       'type': 'text',
+                                                       'placeholder': ''},
+                                                      {'key': 'product',
+                                                       'label': 'Produto contratado',
+                                                       'type': 'text',
+                                                       'placeholder': ''}]},
+                             'tickets': {'label': 'Chamados',
+                                         'singular': 'Chamado',
+                                         'description': 'Solicitações, dúvidas e problemas dos clientes.',
+                                         'status_category': 'ticket_status',
+                                         'due_label': 'Prazo/SLA',
+                                         'fields': [{'key': 'customer',
+                                                     'label': 'Cliente',
+                                                     'type': 'text',
+                                                     'placeholder': ''},
+                                                    {'key': 'priority',
+                                                     'label': 'Prioridade',
+                                                     'type': 'catalog',
+                                                     'category': 'ticket_priority'},
+                                                    {'key': 'channel',
+                                                     'label': 'Canal',
+                                                     'type': 'text',
+                                                     'placeholder': ''}]},
+                             'followups': {'label': 'Acompanhamentos',
+                                           'singular': 'Acompanhamento',
+                                           'description': 'Retornos e ações de relacionamento.',
+                                           'status_category': 'followup_status',
+                                           'due_label': 'Data do retorno',
+                                           'fields': [{'key': 'customer',
+                                                       'label': 'Cliente',
+                                                       'type': 'text',
+                                                       'placeholder': ''},
+                                                      {'key': 'reason',
+                                                       'label': 'Motivo',
+                                                       'type': 'text',
+                                                       'placeholder': ''},
+                                                      {'key': 'channel',
+                                                       'label': 'Canal',
+                                                       'type': 'text',
+                                                       'placeholder': ''}]}}},
+ 'real_estate': {'name': 'Imobiliária e corretores',
+                 'category': 'Imobiliário',
+                 'description': 'Imóveis, interessados, visitas, propostas e desempenho de corretores.',
+                 'recommended_for': 'Imobiliárias, corretores autônomos e equipes de lançamentos imobiliários.',
+                 'operation_group_label': 'Imobiliário',
+                 'modules': ['dashboard',
+                             'properties',
+                             'real_estate_leads',
+                             'visits',
+                             'proposals',
+                             'daily',
+                             'ranking',
+                             'intelligence',
+                             'users',
+                             'teams',
+                             'services_catalog',
+                             'catalogs',
+                             'roles',
+                             'audit',
+                             'integrations'],
+                 'navigation_labels': {'properties': 'Imóveis',
+                                       'real_estate_leads': 'Interessados',
+                                       'visits': 'Visitas',
+                                       'proposals': 'Propostas',
+                                       'plans': 'Serviços imobiliários'},
+                 'admin_labels': {'plans_title': 'Serviços imobiliários',
+                                  'plans_singular': 'serviço',
+                                  'provider': 'Área/Unidade',
+                                  'service': 'Modalidade',
+                                  'attribute': 'Prazo/Referência',
+                                  'coverage': 'Regiões atendidas'},
+                 'roles': [{'code': 'gerente_imobiliario',
+                            'name': 'Gerente imobiliário',
+                            'base_role': 'manager',
+                            'description': 'Gerencia imóveis, corretores e propostas.',
+                            'permissions': ['dashboard.view',
+                                            'properties.view',
+                                            'properties.manage',
+                                            'real_estate_leads.view',
+                                            'real_estate_leads.manage',
+                                            'visits.view',
+                                            'visits.manage',
+                                            'proposals.view',
+                                            'proposals.manage',
+                                            'daily.view',
+                                            'ranking.all',
+                                            'users.view',
+                                            'teams.view',
+                                            'plans.view',
+                                            'catalogs.view',
+                                            'intelligence.view',
+                                            'ai.use']},
+                           {'code': 'corretor',
+                            'name': 'Corretor',
+                            'base_role': 'seller',
+                            'description': 'Acompanha interessados, visitas e propostas.',
+                            'permissions': ['dashboard.view',
+                                            'properties.view',
+                                            'real_estate_leads.view',
+                                            'real_estate_leads.manage',
+                                            'visits.view',
+                                            'visits.manage',
+                                            'proposals.view',
+                                            'proposals.manage',
+                                            'ranking.own']},
+                           {'code': 'assistente_imobiliario',
+                            'name': 'Assistente imobiliário',
+                            'base_role': 'bko',
+                            'description': 'Organiza cadastros, agenda e documentação.',
+                            'permissions': ['dashboard.view',
+                                            'properties.view',
+                                            'properties.manage',
+                                            'real_estate_leads.view',
+                                            'real_estate_leads.manage',
+                                            'visits.view',
+                                            'visits.manage',
+                                            'proposals.view']}],
+                 'catalog_labels': {'property_type': 'Tipos de imóvel',
+                                    'property_status': 'Status do imóvel',
+                                    'lead_interest': 'Interesse do cliente',
+                                    'visit_status': 'Status da visita',
+                                    'proposal_status': 'Status da proposta',
+                                    'transaction_type': 'Modalidade'},
+                 'catalogs': {'property_type': [('apartamento', 'Apartamento'),
+                                                ('casa', 'Casa'),
+                                                ('terreno', 'Terreno'),
+                                                ('comercial', 'Comercial'),
+                                                ('rural', 'Rural')],
+                              'property_status': [('disponivel', 'Disponível'),
+                                                  ('reservado', 'Reservado'),
+                                                  ('negociacao', 'Em negociação'),
+                                                  ('vendido', 'Vendido'),
+                                                  ('alugado', 'Alugado'),
+                                                  ('inativo', 'Inativo')],
+                              'lead_interest': [('compra', 'Compra'),
+                                                ('locacao', 'Locação'),
+                                                ('investimento', 'Investimento')],
+                              'visit_status': [('solicitada', 'Solicitada'),
+                                               ('agendada', 'Agendada'),
+                                               ('confirmada', 'Confirmada'),
+                                               ('realizada', 'Realizada'),
+                                               ('cancelada', 'Cancelada')],
+                              'proposal_status': [('rascunho', 'Rascunho'),
+                                                  ('enviada', 'Enviada'),
+                                                  ('negociacao', 'Em negociação'),
+                                                  ('aceita', 'Aceita'),
+                                                  ('recusada', 'Recusada')],
+                              'transaction_type': [('venda', 'Venda'),
+                                                   ('locacao', 'Locação'),
+                                                   ('temporada', 'Temporada')]},
+                 'offerings': [{'provider': 'Imobiliária',
+                                'service': 'Venda',
+                                'name': 'Intermediação de venda',
+                                'speed': 'Por negociação',
+                                'price': 0,
+                                'benefits': 'Captação, divulgação, visitas e negociação'},
+                               {'provider': 'Imobiliária',
+                                'service': 'Locação',
+                                'name': 'Administração de locação',
+                                'speed': 'Mensal',
+                                'price': 0,
+                                'benefits': 'Gestão contratual e acompanhamento'},
+                               {'provider': 'Imobiliária',
+                                'service': 'Avaliação',
+                                'name': 'Avaliação imobiliária',
+                                'speed': 'Sob agendamento',
+                                'price': 0,
+                                'benefits': 'Parecer comercial do imóvel'}],
+                 'records': {'properties': {'label': 'Imóveis',
+                                            'singular': 'Imóvel',
+                                            'description': 'Carteira de imóveis disponíveis e negociados.',
+                                            'status_category': 'property_status',
+                                            'amount_label': 'Valor do imóvel',
+                                            'fields': [{'key': 'code',
+                                                        'label': 'Código do imóvel',
+                                                        'type': 'text',
+                                                        'placeholder': ''},
+                                                       {'key': 'property_type',
+                                                        'label': 'Tipo',
+                                                        'type': 'catalog',
+                                                        'category': 'property_type'},
+                                                       {'key': 'transaction_type',
+                                                        'label': 'Modalidade',
+                                                        'type': 'catalog',
+                                                        'category': 'transaction_type'},
+                                                       {'key': 'location',
+                                                        'label': 'Localização',
+                                                        'type': 'text',
+                                                        'placeholder': ''},
+                                                       {'key': 'bedrooms', 'label': 'Quartos', 'type': 'number'},
+                                                       {'key': 'area', 'label': 'Área m²', 'type': 'number'}]},
+                             'real_estate_leads': {'label': 'Interessados',
+                                                   'singular': 'Interessado',
+                                                   'description': 'Pessoas interessadas em compra, locação ou '
+                                                                  'investimento.',
+                                                   'status_options': [('novo', 'Novo'),
+                                                                      ('contato', 'Em contato'),
+                                                                      ('qualificado', 'Qualificado'),
+                                                                      ('sem_interesse', 'Sem interesse')],
+                                                   'fields': [{'key': 'interest',
+                                                               'label': 'Interesse',
+                                                               'type': 'catalog',
+                                                               'category': 'lead_interest'},
+                                                              {'key': 'phone',
+                                                               'label': 'Telefone',
+                                                               'type': 'text',
+                                                               'placeholder': ''},
+                                                              {'key': 'email',
+                                                               'label': 'E-mail',
+                                                               'type': 'text',
+                                                               'placeholder': ''},
+                                                              {'key': 'property',
+                                                               'label': 'Imóvel de interesse',
+                                                               'type': 'text',
+                                                               'placeholder': ''}]},
+                             'visits': {'label': 'Visitas',
+                                        'singular': 'Visita',
+                                        'description': 'Agenda e resultado das visitas aos imóveis.',
+                                        'status_category': 'visit_status',
+                                        'due_label': 'Data da visita',
+                                        'fields': [{'key': 'property',
+                                                    'label': 'Imóvel',
+                                                    'type': 'text',
+                                                    'placeholder': ''},
+                                                   {'key': 'client',
+                                                    'label': 'Interessado',
+                                                    'type': 'text',
+                                                    'placeholder': ''},
+                                                   {'key': 'period',
+                                                    'label': 'Horário/Período',
+                                                    'type': 'text',
+                                                    'placeholder': ''},
+                                                   {'key': 'feedback',
+                                                    'label': 'Feedback',
+                                                    'type': 'text',
+                                                    'placeholder': ''}]},
+                             'proposals': {'label': 'Propostas',
+                                           'singular': 'Proposta',
+                                           'description': 'Propostas de compra ou locação.',
+                                           'status_category': 'proposal_status',
+                                           'amount_label': 'Valor proposto',
+                                           'due_label': 'Validade',
+                                           'fields': [{'key': 'property',
+                                                       'label': 'Imóvel',
+                                                       'type': 'text',
+                                                       'placeholder': ''},
+                                                      {'key': 'client',
+                                                       'label': 'Interessado',
+                                                       'type': 'text',
+                                                       'placeholder': ''},
+                                                      {'key': 'transaction_type',
+                                                       'label': 'Modalidade',
+                                                       'type': 'catalog',
+                                                       'category': 'transaction_type'},
+                                                      {'key': 'conditions',
+                                                       'label': 'Condições',
+                                                       'type': 'text',
+                                                       'placeholder': ''}]}}},
+ 'retail': {'name': 'Loja e varejo',
+            'category': 'Varejo',
+            'description': 'Produtos, pedidos, estoque, caixa e desempenho da operação.',
+            'recommended_for': 'Lojas físicas, pequenos varejos, quiosques e operações comerciais enxutas.',
+            'operation_group_label': 'Loja',
+            'modules': ['dashboard',
+                        'products',
+                        'orders',
+                        'stock',
+                        'cash',
+                        'daily',
+                        'ranking',
+                        'intelligence',
+                        'users',
+                        'teams',
+                        'services_catalog',
+                        'catalogs',
+                        'roles',
+                        'audit',
+                        'integrations'],
+            'navigation_labels': {'products': 'Produtos',
+                                  'orders': 'Pedidos',
+                                  'stock': 'Estoque',
+                                  'cash': 'Caixa',
+                                  'plans': 'Catálogo de produtos'},
+            'roles': [{'code': 'gerente_loja',
+                       'name': 'Gerente de loja',
+                       'base_role': 'manager',
+                       'description': 'Gerencia produtos, pedidos, estoque e equipe.',
+                       'permissions': ['dashboard.view',
+                                       'products.view',
+                                       'products.manage',
+                                       'orders.view',
+                                       'orders.manage',
+                                       'stock.view',
+                                       'stock.manage',
+                                       'cash.view',
+                                       'cash.manage',
+                                       'daily.view',
+                                       'ranking.all',
+                                       'users.view',
+                                       'teams.view',
+                                       'intelligence.view',
+                                       'ai.use']},
+                      {'code': 'vendedor_loja',
+                       'name': 'Vendedor',
+                       'base_role': 'seller',
+                       'description': 'Cadastra e acompanha pedidos.',
+                       'permissions': ['dashboard.view',
+                                       'products.view',
+                                       'orders.view',
+                                       'orders.manage',
+                                       'stock.view',
+                                       'ranking.own']},
+                      {'code': 'estoquista',
+                       'name': 'Estoquista',
+                       'base_role': 'bko',
+                       'description': 'Controla produtos e movimentações de estoque.',
+                       'permissions': ['dashboard.view',
+                                       'products.view',
+                                       'products.manage',
+                                       'stock.view',
+                                       'stock.manage']}],
+            'catalog_labels': {'product_category': 'Categorias de produto',
+                               'product_status': 'Status do produto',
+                               'order_status': 'Status do pedido',
+                               'stock_movement': 'Movimentos de estoque'},
+            'catalogs': {'product_category': [('geral', 'Geral'),
+                                              ('eletronicos', 'Eletrônicos'),
+                                              ('vestuario', 'Vestuário'),
+                                              ('casa', 'Casa e decoração')],
+                         'product_status': [('ativo', 'Ativo'),
+                                            ('sem_estoque', 'Sem estoque'),
+                                            ('descontinuado', 'Descontinuado')],
+                         'order_status': [('aberto', 'Aberto'),
+                                          ('pago', 'Pago'),
+                                          ('separacao', 'Em separação'),
+                                          ('entregue', 'Entregue'),
+                                          ('cancelado', 'Cancelado')],
+                         'stock_movement': [('entrada', 'Entrada'),
+                                            ('saida', 'Saída'),
+                                            ('ajuste', 'Ajuste'),
+                                            ('perda', 'Perda')]},
+            'offerings': [],
+            'records': {'products': {'label': 'Produtos',
+                                     'singular': 'Produto',
+                                     'description': 'Cadastro de produtos comercializados.',
+                                     'status_category': 'product_status',
+                                     'amount_label': 'Preço de venda',
+                                     'fields': [{'key': 'sku', 'label': 'SKU', 'type': 'text', 'placeholder': ''},
+                                                {'key': 'category',
+                                                 'label': 'Categoria',
+                                                 'type': 'catalog',
+                                                 'category': 'product_category'},
+                                                {'key': 'cost', 'label': 'Custo', 'type': 'number'},
+                                                {'key': 'minimum_stock', 'label': 'Estoque mínimo', 'type': 'number'}]},
+                        'orders': {'label': 'Pedidos',
+                                   'singular': 'Pedido',
+                                   'description': 'Pedidos e vendas realizadas.',
+                                   'status_category': 'order_status',
+                                   'amount_label': 'Valor total',
+                                   'due_label': 'Data de entrega',
+                                   'fields': [{'key': 'customer',
+                                               'label': 'Cliente',
+                                               'type': 'text',
+                                               'placeholder': ''},
+                                              {'key': 'items', 'label': 'Itens', 'type': 'text', 'placeholder': ''},
+                                              {'key': 'payment_method',
+                                               'label': 'Pagamento',
+                                               'type': 'text',
+                                               'placeholder': ''}]},
+                        'stock': {'label': 'Estoque',
+                                  'singular': 'Movimentação de estoque',
+                                  'description': 'Entradas, saídas e ajustes de estoque.',
+                                  'status_category': 'stock_movement',
+                                  'amount_label': 'Quantidade',
+                                  'fields': [{'key': 'product', 'label': 'Produto', 'type': 'text', 'placeholder': ''},
+                                             {'key': 'document',
+                                              'label': 'Documento',
+                                              'type': 'text',
+                                              'placeholder': ''},
+                                             {'key': 'location',
+                                              'label': 'Local',
+                                              'type': 'text',
+                                              'placeholder': ''}]}}},
+ 'consulting': {'name': 'Consultoria e projetos',
+                'category': 'Serviços',
+                'description': 'Clientes, projetos, entregas, tarefas e acompanhamento gerencial.',
+                'recommended_for': 'Consultorias, agências, escritórios e empresas de projetos sob demanda.',
+                'operation_group_label': 'Projetos',
+                'modules': ['dashboard',
+                            'clients',
+                            'projects',
+                            'deliverables',
+                            'tasks',
+                            'daily',
+                            'intelligence',
+                            'users',
+                            'teams',
+                            'services_catalog',
+                            'catalogs',
+                            'roles',
+                            'audit',
+                            'integrations'],
+                'navigation_labels': {'clients': 'Clientes',
+                                      'projects': 'Projetos',
+                                      'deliverables': 'Entregas',
+                                      'tasks': 'Tarefas',
+                                      'plans': 'Serviços e pacotes'},
+                'roles': [{'code': 'gerente_projetos',
+                           'name': 'Gerente de projetos',
+                           'base_role': 'manager',
+                           'description': 'Gerencia clientes, projetos e entregas.',
+                           'permissions': ['dashboard.view',
+                                           'clients.view',
+                                           'clients.manage',
+                                           'projects.view',
+                                           'projects.manage',
+                                           'deliverables.view',
+                                           'deliverables.manage',
+                                           'tasks.view',
+                                           'tasks.manage',
+                                           'daily.view',
+                                           'users.view',
+                                           'teams.view',
+                                           'plans.view',
+                                           'intelligence.view',
+                                           'ai.use']},
+                          {'code': 'consultor',
+                           'name': 'Consultor',
+                           'base_role': 'seller',
+                           'description': 'Executa atividades e atualiza entregas.',
+                           'permissions': ['dashboard.view',
+                                           'clients.view',
+                                           'projects.view',
+                                           'deliverables.view',
+                                           'deliverables.manage',
+                                           'tasks.view',
+                                           'tasks.manage']},
+                          {'code': 'analista_projetos',
+                           'name': 'Analista de projetos',
+                           'base_role': 'bko',
+                           'description': 'Apoia documentação, agenda e controle.',
+                           'permissions': ['dashboard.view',
+                                           'clients.view',
+                                           'clients.manage',
+                                           'projects.view',
+                                           'projects.manage',
+                                           'deliverables.view',
+                                           'tasks.view',
+                                           'tasks.manage']}],
+                'catalog_labels': {'client_status': 'Status do cliente',
+                                   'project_status': 'Status do projeto',
+                                   'deliverable_status': 'Status da entrega',
+                                   'task_status': 'Status da tarefa'},
+                'catalogs': {'client_status': [('prospect', 'Prospect'),
+                                               ('ativo', 'Ativo'),
+                                               ('pausado', 'Pausado'),
+                                               ('encerrado', 'Encerrado')],
+                             'project_status': [('planejamento', 'Planejamento'),
+                                                ('em_execucao', 'Em execução'),
+                                                ('aguardando', 'Aguardando cliente'),
+                                                ('concluido', 'Concluído'),
+                                                ('cancelado', 'Cancelado')],
+                             'deliverable_status': [('pendente', 'Pendente'),
+                                                    ('em_revisao', 'Em revisão'),
+                                                    ('aprovada', 'Aprovada'),
+                                                    ('atrasada', 'Atrasada')],
+                             'task_status': [('pendente', 'Pendente'),
+                                             ('em_andamento', 'Em andamento'),
+                                             ('concluida', 'Concluída'),
+                                             ('bloqueada', 'Bloqueada')]},
+                'offerings': [{'provider': 'Consultoria',
+                               'service': 'Diagnóstico',
+                               'name': 'Diagnóstico inicial',
+                               'speed': 'Projeto',
+                               'price': 0,
+                               'benefits': 'Levantamento e recomendações'},
+                              {'provider': 'Consultoria',
+                               'service': 'Projeto',
+                               'name': 'Pacote de consultoria',
+                               'speed': 'Mensal',
+                               'price': 0,
+                               'benefits': 'Acompanhamento por escopo'}],
+                'records': {'clients': {'label': 'Clientes',
+                                        'singular': 'Cliente',
+                                        'description': 'Clientes e prospects da consultoria.',
+                                        'status_category': 'client_status',
+                                        'fields': [{'key': 'company',
+                                                    'label': 'Empresa',
+                                                    'type': 'text',
+                                                    'placeholder': ''},
+                                                   {'key': 'contact',
+                                                    'label': 'Contato',
+                                                    'type': 'text',
+                                                    'placeholder': ''},
+                                                   {'key': 'email',
+                                                    'label': 'E-mail',
+                                                    'type': 'text',
+                                                    'placeholder': ''},
+                                                   {'key': 'segment',
+                                                    'label': 'Segmento',
+                                                    'type': 'text',
+                                                    'placeholder': ''}]},
+                            'projects': {'label': 'Projetos',
+                                         'singular': 'Projeto',
+                                         'description': 'Projetos em planejamento ou execução.',
+                                         'status_category': 'project_status',
+                                         'amount_label': 'Valor contratado',
+                                         'due_label': 'Prazo final',
+                                         'fields': [{'key': 'client',
+                                                     'label': 'Cliente',
+                                                     'type': 'text',
+                                                     'placeholder': ''},
+                                                    {'key': 'manager',
+                                                     'label': 'Responsável',
+                                                     'type': 'text',
+                                                     'placeholder': ''},
+                                                    {'key': 'scope',
+                                                     'label': 'Escopo',
+                                                     'type': 'text',
+                                                     'placeholder': ''}]},
+                            'deliverables': {'label': 'Entregas',
+                                             'singular': 'Entrega',
+                                             'description': 'Marcos e entregáveis dos projetos.',
+                                             'status_category': 'deliverable_status',
+                                             'due_label': 'Prazo',
+                                             'fields': [{'key': 'project',
+                                                         'label': 'Projeto',
+                                                         'type': 'text',
+                                                         'placeholder': ''},
+                                                        {'key': 'reviewer',
+                                                         'label': 'Aprovador',
+                                                         'type': 'text',
+                                                         'placeholder': ''}]},
+                            'tasks': {'label': 'Tarefas',
+                                      'singular': 'Tarefa',
+                                      'description': 'Atividades dos projetos.',
+                                      'status_category': 'task_status',
+                                      'due_label': 'Prazo',
+                                      'fields': [{'key': 'project',
+                                                  'label': 'Projeto',
+                                                  'type': 'text',
+                                                  'placeholder': ''},
+                                                 {'key': 'priority',
+                                                  'label': 'Prioridade',
+                                                  'type': 'text',
+                                                  'placeholder': ''}]}}},
+ 'recruitment': {'name': 'Recrutamento e seleção',
+                 'category': 'Pessoas',
+                 'description': 'Vagas, candidatos, entrevistas e tarefas de seleção.',
+                 'recommended_for': 'RH interno, consultorias de recrutamento e seleção de alto volume.',
+                 'operation_group_label': 'Recrutamento',
+                 'modules': ['dashboard',
+                             'vacancies',
+                             'candidates',
+                             'interviews',
+                             'tasks',
+                             'daily',
+                             'intelligence',
+                             'users',
+                             'teams',
+                             'services_catalog',
+                             'catalogs',
+                             'roles',
+                             'audit',
+                             'integrations'],
+                 'navigation_labels': {'vacancies': 'Vagas',
+                                       'candidates': 'Candidatos',
+                                       'interviews': 'Entrevistas',
+                                       'tasks': 'Tarefas',
+                                       'plans': 'Serviços de recrutamento'},
+                 'roles': [{'code': 'coordenador_rh',
+                            'name': 'Coordenador de RH',
+                            'base_role': 'manager',
+                            'description': 'Gerencia vagas, candidatos e indicadores.',
+                            'permissions': ['dashboard.view',
+                                            'vacancies.view',
+                                            'vacancies.manage',
+                                            'candidates.view',
+                                            'candidates.manage',
+                                            'interviews.view',
+                                            'interviews.manage',
+                                            'tasks.view',
+                                            'tasks.manage',
+                                            'daily.view',
+                                            'users.view',
+                                            'teams.view',
+                                            'intelligence.view',
+                                            'ai.use']},
+                           {'code': 'recrutador',
+                            'name': 'Recrutador',
+                            'base_role': 'seller',
+                            'description': 'Trabalha candidatos e entrevistas.',
+                            'permissions': ['dashboard.view',
+                                            'vacancies.view',
+                                            'candidates.view',
+                                            'candidates.manage',
+                                            'interviews.view',
+                                            'interviews.manage',
+                                            'tasks.view',
+                                            'tasks.manage']},
+                           {'code': 'assistente_rh',
+                            'name': 'Assistente de RH',
+                            'base_role': 'bko',
+                            'description': 'Apoia triagem, agenda e documentação.',
+                            'permissions': ['dashboard.view',
+                                            'vacancies.view',
+                                            'candidates.view',
+                                            'candidates.manage',
+                                            'interviews.view',
+                                            'interviews.manage',
+                                            'tasks.view']}],
+                 'catalog_labels': {'vacancy_status': 'Status da vaga',
+                                    'candidate_stage': 'Etapas do candidato',
+                                    'interview_status': 'Status da entrevista',
+                                    'task_status': 'Status da tarefa'},
+                 'catalogs': {'vacancy_status': [('rascunho', 'Rascunho'),
+                                                 ('aberta', 'Aberta'),
+                                                 ('pausada', 'Pausada'),
+                                                 ('preenchida', 'Preenchida'),
+                                                 ('cancelada', 'Cancelada')],
+                              'candidate_stage': [('inscrito', 'Inscrito'),
+                                                  ('triagem', 'Triagem'),
+                                                  ('entrevista', 'Entrevista'),
+                                                  ('proposta', 'Proposta'),
+                                                  ('contratado', 'Contratado'),
+                                                  ('reprovado', 'Reprovado')],
+                              'interview_status': [('agendada', 'Agendada'),
+                                                   ('confirmada', 'Confirmada'),
+                                                   ('realizada', 'Realizada'),
+                                                   ('reagendada', 'Reagendada'),
+                                                   ('cancelada', 'Cancelada')],
+                              'task_status': [('pendente', 'Pendente'),
+                                              ('em_andamento', 'Em andamento'),
+                                              ('concluida', 'Concluída')]},
+                 'offerings': [{'provider': 'RH',
+                                'service': 'Recrutamento',
+                                'name': 'Seleção por vaga',
+                                'speed': 'Por processo',
+                                'price': 0,
+                                'benefits': 'Divulgação, triagem e entrevistas'}],
+                 'records': {'vacancies': {'label': 'Vagas',
+                                           'singular': 'Vaga',
+                                           'description': 'Vagas abertas e processos seletivos.',
+                                           'status_category': 'vacancy_status',
+                                           'amount_label': 'Faixa salarial',
+                                           'due_label': 'Data limite',
+                                           'fields': [{'key': 'department',
+                                                       'label': 'Área',
+                                                       'type': 'text',
+                                                       'placeholder': ''},
+                                                      {'key': 'location',
+                                                       'label': 'Local',
+                                                       'type': 'text',
+                                                       'placeholder': ''},
+                                                      {'key': 'work_model',
+                                                       'label': 'Modelo de trabalho',
+                                                       'type': 'text',
+                                                       'placeholder': ''},
+                                                      {'key': 'positions',
+                                                       'label': 'Quantidade de vagas',
+                                                       'type': 'number'}]},
+                             'candidates': {'label': 'Candidatos',
+                                            'singular': 'Candidato',
+                                            'description': 'Candidatos e etapa atual no processo.',
+                                            'status_category': 'candidate_stage',
+                                            'fields': [{'key': 'phone',
+                                                        'label': 'Telefone',
+                                                        'type': 'text',
+                                                        'placeholder': ''},
+                                                       {'key': 'email',
+                                                        'label': 'E-mail',
+                                                        'type': 'text',
+                                                        'placeholder': ''},
+                                                       {'key': 'vacancy',
+                                                        'label': 'Vaga',
+                                                        'type': 'text',
+                                                        'placeholder': ''},
+                                                       {'key': 'source',
+                                                        'label': 'Origem',
+                                                        'type': 'text',
+                                                        'placeholder': ''}]},
+                             'interviews': {'label': 'Entrevistas',
+                                            'singular': 'Entrevista',
+                                            'description': 'Agenda e resultado das entrevistas.',
+                                            'status_category': 'interview_status',
+                                            'due_label': 'Data da entrevista',
+                                            'fields': [{'key': 'candidate',
+                                                        'label': 'Candidato',
+                                                        'type': 'text',
+                                                        'placeholder': ''},
+                                                       {'key': 'vacancy',
+                                                        'label': 'Vaga',
+                                                        'type': 'text',
+                                                        'placeholder': ''},
+                                                       {'key': 'interviewer',
+                                                        'label': 'Entrevistador',
+                                                        'type': 'text',
+                                                        'placeholder': ''},
+                                                       {'key': 'format',
+                                                        'label': 'Formato',
+                                                        'type': 'text',
+                                                        'placeholder': ''}]},
+                             'tasks': {'label': 'Tarefas',
+                                       'singular': 'Tarefa',
+                                       'description': 'Pendências do processo seletivo.',
+                                       'status_category': 'task_status',
+                                       'due_label': 'Prazo',
+                                       'fields': [{'key': 'related_to',
+                                                   'label': 'Relacionado a',
+                                                   'type': 'text',
+                                                   'placeholder': ''},
+                                                  {'key': 'priority',
+                                                   'label': 'Prioridade',
+                                                   'type': 'text',
+                                                   'placeholder': ''}]}}},
+ 'custom': {'name': 'Perfil personalizado',
+            'category': 'Personalizado',
+            'description': 'Estrutura mínima para montar um perfil escolhendo manualmente os módulos necessários.',
+            'recommended_for': 'Operações que não se encaixam nos modelos prontos ou precisam começar do zero.',
+            'operation_group_label': 'Operação',
+            'modules': ['dashboard', 'users', 'roles', 'audit'],
+            'navigation_labels': {},
+            'roles': [],
+            'catalog_labels': {},
+            'catalogs': {},
+            'offerings': [],
+            'records': {}}}
+
+GENERIC_RECORD_MODULES = ['accounts_payable',
+ 'accounts_receivable',
+ 'agreements',
+ 'candidates',
+ 'clients',
+ 'customers',
+ 'debtors',
+ 'deliverables',
+ 'followups',
+ 'interviews',
+ 'leads',
+ 'negotiations',
+ 'opportunities',
+ 'orders',
+ 'products',
+ 'projects',
+ 'properties',
+ 'proposals',
+ 'real_estate_leads',
+ 'schedule',
+ 'service_orders',
+ 'stock',
+ 'tasks',
+ 'tickets',
+ 'vacancies',
+ 'visits']
+PRESET_SCHEMA_VERSION = 2
 
 # O Contratante funciona como administrador de visualização do perfil.
 # Ele enxerga todos os dados permitidos no próprio ambiente, mas não cria,
@@ -151,6 +1487,10 @@ PROFILE_ADMIN_PERMISSIONS = {
     "users.manage", "teams.manage", "plans.manage", "catalogs.manage",
     "roles.manage", "integrations.manage",
 }
+
+# Visualização genérica para o Contratante. A checagem de módulo continua
+# sendo feita pelo perfil ativo, portanto ele não ganha acesso cruzado.
+PROFILE_CONTRACTOR_PERMISSIONS.update({f"{module}.view" for module in GENERIC_RECORD_MODULES})
 
 REQUEST_CONTEXT = threading.local()
 
@@ -203,6 +1543,16 @@ def install_profiles(ns: dict[str, Any]) -> None:
         ("cash.view", "Caixa", "Visualizar lançamentos e saldo do caixa"),
         ("cash.manage", "Caixa", "Criar e editar lançamentos do caixa"),
     ]
+    module_titles: dict[str, str] = {}
+    for template in PROFILE_TEMPLATES.values():
+        for module, config in template.get("records", {}).items():
+            module_titles.setdefault(module, str(config.get("label") or module))
+    for module in GENERIC_RECORD_MODULES:
+        title = module_titles.get(module, module.replace("_", " ").title())
+        extra_permissions.extend([
+            (f"{module}.view", title, f"Visualizar {title.lower()}"),
+            (f"{module}.manage", title, f"Criar e administrar {title.lower()}"),
+        ])
     existing_permission_codes = {item[0] for item in ns["PERMISSIONS"]}
     ns["PERMISSIONS"].extend(item for item in extra_permissions if item[0] not in existing_permission_codes)
 
@@ -278,7 +1628,30 @@ def install_profiles(ns: dict[str, Any]) -> None:
                     FOREIGN KEY(profile_id) REFERENCES business_profiles(id) ON DELETE CASCADE,
                     FOREIGN KEY(created_by) REFERENCES users(id) ON DELETE SET NULL
                 );
+
+                CREATE TABLE IF NOT EXISTS profile_records (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    profile_id INTEGER NOT NULL,
+                    module_code TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    subtitle TEXT,
+                    status TEXT,
+                    amount REAL NOT NULL DEFAULT 0,
+                    assigned_user_id INTEGER,
+                    due_date TEXT,
+                    notes TEXT,
+                    data_json TEXT NOT NULL DEFAULT '{}',
+                    active INTEGER NOT NULL DEFAULT 1,
+                    created_by INTEGER,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    FOREIGN KEY(profile_id) REFERENCES business_profiles(id) ON DELETE CASCADE,
+                    FOREIGN KEY(assigned_user_id) REFERENCES users(id) ON DELETE SET NULL,
+                    FOREIGN KEY(created_by) REFERENCES users(id) ON DELETE SET NULL
+                );
                 CREATE INDEX IF NOT EXISTS idx_profile_users_user ON profile_users(user_id,active);
+                CREATE INDEX IF NOT EXISTS idx_profile_records_module ON profile_records(profile_id,module_code,active);
+                CREATE INDEX IF NOT EXISTS idx_profile_records_due ON profile_records(profile_id,due_date);
                 CREATE INDEX IF NOT EXISTS idx_cash_profile_date ON cash_transactions(profile_id,transaction_date);
                 """
             )
@@ -487,6 +1860,7 @@ def install_profiles(ns: dict[str, Any]) -> None:
                     "UPDATE sessions SET active_profile_id=? WHERE token_hash=?",
                     (profile_id, ns["token_hash"](raw_token)),
                 )
+            ensure_profile_preset(conn, profile_id)
             profile = conn.execute("SELECT * FROM business_profiles WHERE id=?", (profile_id,)).fetchone()
             membership = conn.execute(
                 """SELECT pu.*,r.name AS membership_role_name,r.base_role AS membership_base_role,t.name AS membership_team_name
@@ -560,7 +1934,6 @@ def install_profiles(ns: dict[str, Any]) -> None:
         "ranking.own": "ranking", "ranking.all": "ranking",
         "daily.view": "daily", "users.view": "users", "users.manage": "users",
         "teams.view": "teams", "teams.manage": "teams",
-        "plans.view": "plans", "plans.manage": "plans",
         "catalogs.view": "catalogs", "catalogs.manage": "catalogs",
         "roles.view": "roles", "roles.manage": "roles", "audit.view": "audit",
         "intelligence.view": "intelligence", "ai.use": "intelligence",
@@ -569,14 +1942,21 @@ def install_profiles(ns: dict[str, Any]) -> None:
         "profile.view": "users",
         "cash.view": "cash", "cash.manage": "cash",
     }
+    for module in GENERIC_RECORD_MODULES:
+        permission_modules[f"{module}.view"] = module
+        permission_modules[f"{module}.manage"] = module
 
     def has_permission(user: dict[str, Any] | None, code: str) -> bool:
         if not user:
             return False
         if is_platform_owner(user):
             return True
+        modules = set(user.get("profile_modules") or [])
+        if code in {"plans.view", "plans.manage"}:
+            if not ({"plans", "services_catalog"} & modules):
+                return False
         required_module = permission_modules.get(code)
-        if required_module and required_module not in set(user.get("profile_modules") or []):
+        if required_module and required_module not in modules:
             return False
         if user.get("is_contractor") and code in PROFILE_CONTRACTOR_PERMISSIONS:
             return True
@@ -646,6 +2026,10 @@ def install_profiles(ns: dict[str, Any]) -> None:
 
     def public_user(self: Any, user: dict[str, Any]) -> dict[str, Any]:
         owner = is_platform_owner(user)
+        with db_connect() as conn:
+            profile_ids = [int(row[0]) for row in conn.execute("SELECT id FROM business_profiles").fetchall()]
+            for profile_id in profile_ids:
+                ensure_profile_preset(conn, profile_id)
         profiles = accessible_profiles(user["id"], owner)
         profile = {
             "id": user.get("profile_id"),
@@ -653,6 +2037,7 @@ def install_profiles(ns: dict[str, Any]) -> None:
             "business_type": user.get("profile_type"),
             "modules": user.get("profile_modules", []),
             "settings": user.get("profile_settings", {}),
+            "preset": public_template(str(user.get("profile_type") or "custom")),
             "active": bool(user.get("profile_active", True)),
         }
         return {
@@ -682,8 +2067,9 @@ def install_profiles(ns: dict[str, Any]) -> None:
     def normalize_modules(business_type: str, modules: Any) -> list[str]:
         allowed = {
             "dashboard", "sales", "bko", "daily", "ranking", "intelligence",
-            "powerbi", "users", "teams", "plans", "catalogs", "roles",
-            "audit", "integrations", "cash",
+            "powerbi", "users", "teams", "plans", "services_catalog",
+            "catalogs", "roles", "audit", "integrations", "cash",
+            *GENERIC_RECORD_MODULES,
         }
         if not isinstance(modules, list):
             modules = PROFILE_TEMPLATES.get(business_type, PROFILE_TEMPLATES["services"])["modules"]
@@ -695,8 +2081,41 @@ def install_profiles(ns: dict[str, Any]) -> None:
                 result.append(essential)
         return list(dict.fromkeys(result))
 
+    def public_template(business_type: str) -> dict[str, Any]:
+        template = PROFILE_TEMPLATES.get(business_type, PROFILE_TEMPLATES["custom"])
+        return {
+            "code": business_type,
+            "name": template.get("name", business_type),
+            "category": template.get("category", "Perfil"),
+            "description": template.get("description", ""),
+            "recommended_for": template.get("recommended_for", ""),
+            "operation_group_label": template.get("operation_group_label", "Operação"),
+            "modules": list(template.get("modules", [])),
+            "navigation_labels": dict(template.get("navigation_labels", {})),
+            "admin_labels": dict(template.get("admin_labels", {})),
+            "catalog_labels": dict(template.get("catalog_labels", {})),
+            "records": dict(template.get("records", {})),
+            "roles": [{"name": role.get("name"), "description": role.get("description"), "base_role": role.get("base_role")} for role in template.get("roles", [])],
+            "catalogs": [{"category": category, "label": template.get("catalog_labels", {}).get(category, category), "items": [item[1] for item in items]} for category, items in template.get("catalogs", {}).items()],
+            "offerings": [{"name": item.get("name"), "service": item.get("service")} for item in template.get("offerings", [])],
+            "roles_count": len(template.get("roles", [])),
+            "catalogs_count": sum(len(items) for items in template.get("catalogs", {}).values()),
+            "offerings_count": len(template.get("offerings", [])),
+        }
+
+    def unique_role_name(conn: sqlite3.Connection, profile_id: int, desired: str) -> str:
+        row = conn.execute("SELECT code,profile_id FROM roles WHERE name=? COLLATE NOCASE", (desired,)).fetchone()
+        if not row or int(row["profile_id"] or 0) == profile_id:
+            return desired
+        profile = conn.execute("SELECT name FROM business_profiles WHERE id=?", (profile_id,)).fetchone()
+        suffix = str(profile["name"] if profile else f"Perfil {profile_id}")[:40]
+        return f"{desired} · {suffix}"
+
     def seed_profile(conn: sqlite3.Connection, profile_id: int, business_type: str) -> None:
         now = utc_now()
+        template = PROFILE_TEMPLATES.get(business_type, PROFILE_TEMPLATES["custom"])
+
+        # O perfil de internet reaproveita os cadastros da operação original.
         if business_type == "internet_sales":
             source_profile = conn.execute(
                 "SELECT id FROM business_profiles WHERE id<>? AND business_type='internet_sales' ORDER BY id LIMIT 1",
@@ -718,13 +2137,88 @@ def install_profiles(ns: dict[str, Any]) -> None:
                         (source_id,),
                     ).fetchall()
                     for row in rows:
-                        code = f"p{profile_id}_{row['code']}"
+                        code = f"p{profile_id}_{re.sub(r'[^a-z0-9_]+', '_', str(row['code']).lower()).strip('_')}"
                         conn.execute(
                             """INSERT OR IGNORE INTO catalog_items
                                (profile_id,category,code,label,sort_order,active,metadata_json,created_at,updated_at)
                                VALUES(?,?,?,?,?,?,?,?,?)""",
                             (profile_id, row["category"], code, row["label"], row["sort_order"], row["active"], row["metadata_json"], now, now),
                         )
+
+        # Cargos iniciais do segmento.
+        for role in template.get("roles", []):
+            raw_code = re.sub(r"[^a-z0-9_]+", "_", str(role.get("code") or role.get("name") or "cargo").lower()).strip("_")
+            role_code = f"p{profile_id}_{raw_code}"[:64]
+            stored_name = unique_role_name(conn, profile_id, str(role.get("name") or raw_code.replace("_", " ").title()))
+            conn.execute(
+                """INSERT OR IGNORE INTO roles
+                   (code,name,description,base_role,is_system,active,created_at,updated_at,profile_id)
+                   VALUES(?,?,?,?,0,1,?,?,?)""",
+                (role_code, stored_name, str(role.get("description") or ""), str(role.get("base_role") or "seller"), now, now, profile_id),
+            )
+            conn.execute(
+                """UPDATE roles SET description=?,base_role=?,active=1,updated_at=?,profile_id=? WHERE code=?""",
+                (str(role.get("description") or ""), str(role.get("base_role") or "seller"), now, profile_id, role_code),
+            )
+            for permission in role.get("permissions", []):
+                if conn.execute("SELECT 1 FROM permissions WHERE code=?", (permission,)).fetchone():
+                    conn.execute(
+                        "INSERT OR REPLACE INTO role_permissions(role_code,permission_code,allowed) VALUES(?,?,1)",
+                        (role_code, permission),
+                    )
+
+        # Catálogos próprios do preset.
+        for category, items in template.get("catalogs", {}).items():
+            for order, item in enumerate(items, 1):
+                raw_code, label = item[0], item[1]
+                existing = conn.execute(
+                    "SELECT id FROM catalog_items WHERE profile_id=? AND category=? AND label=? COLLATE NOCASE",
+                    (profile_id, category, label),
+                ).fetchone()
+                if existing:
+                    continue
+                clean_code = re.sub(r"[^a-z0-9_]+", "_", str(raw_code).lower()).strip("_")
+                stored_code = f"p{profile_id}_{clean_code}"[:80]
+                conn.execute(
+                    """INSERT OR IGNORE INTO catalog_items
+                       (profile_id,category,code,label,sort_order,active,metadata_json,created_at,updated_at)
+                       VALUES(?,?,?,?,?,1,'{}',?,?)""",
+                    (profile_id, category, stored_code, label, order, now, now),
+                )
+
+        # Produtos, planos ou serviços recomendados pelo segmento.
+        for order, item in enumerate(template.get("offerings", []), 1):
+            name = str(item.get("name") or "Serviço")
+            if conn.execute("SELECT 1 FROM plans WHERE profile_id=? AND name=? COLLATE NOCASE", (profile_id, name)).fetchone():
+                continue
+            conn.execute(
+                """INSERT INTO plans(profile_id,provider,service,name,speed,price,benefits,uf_list,sort_order,active,created_at,updated_at)
+                   VALUES(?,?,?,?,?,?,?,?,?,1,?,?)""",
+                (profile_id, str(item.get("provider") or ""), str(item.get("service") or ""), name,
+                 str(item.get("speed") or ""), float(item.get("price") or 0), str(item.get("benefits") or ""),
+                 str(item.get("uf_list") or ""), order * 10, now, now),
+            )
+
+    def ensure_profile_preset(conn: sqlite3.Connection, profile_id: int) -> None:
+        row = conn.execute("SELECT business_type,modules_json,settings_json FROM business_profiles WHERE id=?", (profile_id,)).fetchone()
+        if not row:
+            return
+        business_type = str(row["business_type"] or "custom")
+        template = PROFILE_TEMPLATES.get(business_type, PROFILE_TEMPLATES["custom"])
+        settings = _parse_json(row["settings_json"], {})
+        current_version = int(settings.get("preset_schema_version") or 0)
+        if current_version < PRESET_SCHEMA_VERSION:
+            settings["preset_schema_version"] = PRESET_SCHEMA_VERSION
+            settings["preset_name"] = template.get("name", business_type)
+            settings["preset_category"] = template.get("category", "Perfil")
+            # Perfis anteriores à 2.2 recebiam módulos comerciais genéricos.
+            # Agora cada preset passa a ter somente as abas do próprio segmento.
+            modules = normalize_modules(business_type, template.get("modules", [])) if business_type != "custom" else normalize_modules(business_type, _parse_json(row["modules_json"], []))
+            conn.execute(
+                "UPDATE business_profiles SET modules_json=?,settings_json=?,updated_at=? WHERE id=?",
+                (_json(modules), _json(settings), utc_now(), profile_id),
+            )
+        seed_profile(conn, profile_id, business_type)
 
     def api_profiles(self: Any) -> None:
         user, _, _ = self.require_user()
@@ -741,10 +2235,7 @@ def install_profiles(ns: dict[str, Any]) -> None:
         self.send_json(200, {
             "ok": True,
             "profiles": profiles,
-            "templates": [
-                {"code": code, **template}
-                for code, template in PROFILE_TEMPLATES.items()
-            ],
+            "templates": [public_template(code) for code in PROFILE_TEMPLATES],
             "available_contractors": candidates,
         })
 
@@ -774,9 +2265,9 @@ def install_profiles(ns: dict[str, Any]) -> None:
             cur = conn.execute(
                 """INSERT INTO business_profiles
                    (name,slug,business_type,description,contractor_user_id,active,modules_json,settings_json,created_by,created_at,updated_at)
-                   VALUES(?,?,?,?,?,1,?,'{}',?,?,?)""",
+                   VALUES(?,?,?,?,?,1,?,?,?,?,?)""",
                 (name, slug, business_type, description or PROFILE_TEMPLATES[business_type]["description"], contractor_user_id,
-                 _json(modules), actor["id"], now, now),
+                 _json(modules), _json({"preset_schema_version": PRESET_SCHEMA_VERSION, "preset_name": PROFILE_TEMPLATES[business_type]["name"]}), actor["id"], now, now),
             )
             profile_id = int(cur.lastrowid)
             seed_profile(conn, profile_id, business_type)
@@ -835,6 +2326,12 @@ def install_profiles(ns: dict[str, Any]) -> None:
             updates["updated_at"] = utc_now()
             assignments = ",".join(f"{key}=?" for key in updates)
             conn.execute(f"UPDATE business_profiles SET {assignments} WHERE id=?", [*updates.values(), profile_id])
+            if "business_type" in updates:
+                settings = _parse_json(current["settings_json"], {})
+                settings.update({"preset_schema_version": PRESET_SCHEMA_VERSION, "preset_name": PROFILE_TEMPLATES[business_type]["name"]})
+                conn.execute("UPDATE business_profiles SET modules_json=?,settings_json=?,updated_at=? WHERE id=?",
+                             (_json(normalize_modules(business_type, PROFILE_TEMPLATES[business_type]["modules"])), _json(settings), utc_now(), profile_id))
+                seed_profile(conn, profile_id, business_type)
             if owner and "contractor_user_id" in data:
                 conn.execute("UPDATE profile_users SET is_contractor=0,updated_at=? WHERE profile_id=?", (utc_now(), profile_id))
                 if contractor_id:
@@ -1591,6 +3088,182 @@ def install_profiles(ns: dict[str, Any]) -> None:
         audit(actor["id"], "cash.update", "cash_transaction", transaction_id, {"profile_id": pid, "fields": list(updates)}, self.client_ip())
         self.send_json(200, {"ok": True, "message": "Lançamento atualizado."})
 
+    # ------------------------- registros dos presets -------------------------
+    def record_config(user: dict[str, Any], module: str) -> dict[str, Any]:
+        business_type = str(user.get("profile_type") or "custom")
+        template = PROFILE_TEMPLATES.get(business_type, PROFILE_TEMPLATES["custom"])
+        config = template.get("records", {}).get(module)
+        if not config or module not in set(user.get("profile_modules", [])):
+            raise ApiError(404, "Módulo não disponível neste perfil.")
+        return config
+
+    def can_view_record_module(user: dict[str, Any], module: str) -> bool:
+        return is_platform_owner(user) or bool(user.get("is_contractor")) or has_permission(user, f"{module}.view") or has_permission(user, f"{module}.manage")
+
+    def can_manage_record_module(user: dict[str, Any], module: str) -> bool:
+        return is_platform_owner(user) or has_permission(user, f"{module}.manage")
+
+    def serialize_record(row: sqlite3.Row) -> dict[str, Any]:
+        item = dict(row)
+        item["data"] = _parse_json(item.pop("data_json", "{}"), {})
+        item["active"] = bool(item.get("active"))
+        return item
+
+    def api_profile_records(self: Any, query: dict[str, list[str]]) -> None:
+        actor, _, _ = self.require_user()
+        module = str((query.get("module") or [""])[0]).strip()
+        config = record_config(actor, module)
+        if not can_view_record_module(actor, module):
+            raise ApiError(403, "Sem permissão para visualizar este módulo.")
+        pid = current_profile_id(actor)
+        include_all = (query.get("all") or [""])[0] == "1" and can_manage_record_module(actor, module)
+        search = str((query.get("search") or [""])[0]).strip()
+        filters = ["r.profile_id=?", "r.module_code=?"]
+        params: list[Any] = [pid, module]
+        if not include_all:
+            filters.append("r.active=1")
+        if search:
+            filters.append("(r.title LIKE ? OR r.subtitle LIKE ? OR r.notes LIKE ? OR r.data_json LIKE ?)")
+            term = f"%{search}%"
+            params.extend([term, term, term, term])
+        with db_connect() as conn:
+            rows = conn.execute(
+                f"""SELECT r.*,u.name AS assigned_user_name
+                    FROM profile_records r LEFT JOIN users u ON u.id=r.assigned_user_id
+                    WHERE {' AND '.join(filters)}
+                    ORDER BY CASE WHEN r.due_date IS NULL OR r.due_date='' THEN 1 ELSE 0 END,r.due_date DESC,r.id DESC
+                    LIMIT 1500""",
+                params,
+            ).fetchall()
+            status_rows = conn.execute(
+                """SELECT COALESCE(NULLIF(status,''),'sem_status') AS status,COUNT(*) AS total
+                   FROM profile_records WHERE profile_id=? AND module_code=? AND active=1
+                   GROUP BY COALESCE(NULLIF(status,''),'sem_status') ORDER BY total DESC""",
+                (pid, module),
+            ).fetchall()
+        self.send_json(200, {
+            "ok": True,
+            "module": module,
+            "config": config,
+            "records": [serialize_record(row) for row in rows],
+            "summary": {"total": sum(int(row["total"]) for row in status_rows), "by_status": [dict(row) for row in status_rows]},
+            "can_manage": can_manage_record_module(actor, module),
+        })
+
+    def normalize_record_payload(data: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
+        title = str(data.get("title") or "").strip()
+        if len(title) < 2:
+            raise ApiError(400, f"Informe o nome ou identificação de {str(config.get('singular') or 'registro').lower()}.")
+        amount = float(data.get("amount") or 0)
+        if amount < 0:
+            raise ApiError(400, "O valor não pode ser negativo.")
+        due_date = str(data.get("due_date") or "").strip() or None
+        if due_date and not ns["validate_iso_date"](due_date, False):
+            raise ApiError(400, "Data inválida.")
+        allowed_fields = {str(field.get("key")) for field in config.get("fields", []) if field.get("key")}
+        raw_fields = data.get("data") if isinstance(data.get("data"), dict) else {}
+        fields = {key: raw_fields.get(key) for key in allowed_fields if key in raw_fields}
+        return {
+            "title": title,
+            "subtitle": str(data.get("subtitle") or "").strip()[:240],
+            "status": str(data.get("status") or "").strip()[:80],
+            "amount": amount,
+            "assigned_user_id": int(data.get("assigned_user_id") or 0) or None,
+            "due_date": due_date,
+            "notes": str(data.get("notes") or "").strip()[:4000],
+            "data_json": _json(fields),
+        }
+
+    def validate_record_assignee(conn: sqlite3.Connection, profile_id: int, user_id: int | None) -> None:
+        if user_id and not conn.execute(
+            "SELECT 1 FROM profile_users WHERE profile_id=? AND user_id=? AND active=1", (profile_id, user_id)
+        ).fetchone():
+            raise ApiError(400, "Responsável inválido para este perfil.")
+
+    def api_profile_record_create(self: Any, actor: dict[str, Any]) -> None:
+        data = self.read_json()
+        module = str(data.get("module") or "").strip()
+        config = record_config(actor, module)
+        if not can_manage_record_module(actor, module):
+            raise ApiError(403, "Sem permissão para criar registros neste módulo.")
+        pid = current_profile_id(actor)
+        values = normalize_record_payload(data, config)
+        now = utc_now()
+        with db_connect() as conn:
+            validate_record_assignee(conn, pid, values["assigned_user_id"])
+            cur = conn.execute(
+                """INSERT INTO profile_records
+                   (profile_id,module_code,title,subtitle,status,amount,assigned_user_id,due_date,notes,data_json,active,created_by,created_at,updated_at)
+                   VALUES(?,?,?,?,?,?,?,?,?,?,1,?,?,?)""",
+                (pid, module, values["title"], values["subtitle"], values["status"], values["amount"],
+                 values["assigned_user_id"], values["due_date"], values["notes"], values["data_json"], actor["id"], now, now),
+            )
+        audit(actor["id"], "profile_record.create", module, cur.lastrowid, {"profile_id": pid, "title": values["title"]}, self.client_ip())
+        self.send_json(201, {"ok": True, "id": cur.lastrowid, "message": f"{config.get('singular','Registro')} criado."})
+
+    def api_profile_record_update(self: Any, actor: dict[str, Any], record_id: int) -> None:
+        data = self.read_json()
+        module = str(data.get("module") or "").strip()
+        config = record_config(actor, module)
+        if not can_manage_record_module(actor, module):
+            raise ApiError(403, "Sem permissão para alterar registros neste módulo.")
+        pid = current_profile_id(actor)
+        values = normalize_record_payload(data, config)
+        values["active"] = 1 if bool(data.get("active", True)) else 0
+        values["updated_at"] = utc_now()
+        with db_connect() as conn:
+            current = conn.execute(
+                "SELECT id FROM profile_records WHERE id=? AND profile_id=? AND module_code=?", (record_id, pid, module)
+            ).fetchone()
+            if not current:
+                raise ApiError(404, "Registro não encontrado.")
+            validate_record_assignee(conn, pid, values["assigned_user_id"])
+            conn.execute(
+                """UPDATE profile_records SET title=?,subtitle=?,status=?,amount=?,assigned_user_id=?,due_date=?,notes=?,data_json=?,active=?,updated_at=?
+                   WHERE id=? AND profile_id=? AND module_code=?""",
+                (values["title"], values["subtitle"], values["status"], values["amount"], values["assigned_user_id"],
+                 values["due_date"], values["notes"], values["data_json"], values["active"], values["updated_at"], record_id, pid, module),
+            )
+        audit(actor["id"], "profile_record.update", module, record_id, {"profile_id": pid}, self.client_ip())
+        self.send_json(200, {"ok": True, "message": f"{config.get('singular','Registro')} atualizado."})
+
+    def generic_dashboard(self: Any, user: dict[str, Any]) -> None:
+        pid = current_profile_id(user)
+        template = PROFILE_TEMPLATES.get(str(user.get("profile_type") or "custom"), PROFILE_TEMPLATES["custom"])
+        modules = [module for module in template.get("records", {}) if module in set(user.get("profile_modules", []))]
+        cards: list[dict[str, Any]] = []
+        recent: list[dict[str, Any]] = []
+        with db_connect() as conn:
+            for module in modules:
+                config = template["records"][module]
+                row = conn.execute(
+                    """SELECT COUNT(*) AS total,
+                       SUM(CASE WHEN due_date IS NOT NULL AND due_date<>'' AND due_date<? AND active=1 THEN 1 ELSE 0 END) AS overdue,
+                       COALESCE(SUM(CASE WHEN active=1 THEN amount ELSE 0 END),0) AS amount
+                       FROM profile_records WHERE profile_id=? AND module_code=? AND active=1""",
+                    (local_today(), pid, module),
+                ).fetchone()
+                cards.append({"module": module, "label": config.get("label", module), "total": int(row["total"] or 0),
+                              "overdue": int(row["overdue"] or 0), "amount": float(row["amount"] or 0)})
+            if modules:
+                placeholders = ",".join("?" for _ in modules)
+                rows = conn.execute(
+                    f"""SELECT r.*,u.name AS assigned_user_name FROM profile_records r
+                        LEFT JOIN users u ON u.id=r.assigned_user_id
+                        WHERE r.profile_id=? AND r.module_code IN ({placeholders}) AND r.active=1
+                        ORDER BY r.updated_at DESC,r.id DESC LIMIT 12""",
+                    [pid, *modules],
+                ).fetchall()
+                recent = [serialize_record(row) for row in rows]
+        self.send_json(200, {
+            "ok": True,
+            "profile_type": str(user.get("profile_type") or "custom"),
+            "generic": True,
+            "preset": public_template(str(user.get("profile_type") or "custom")),
+            "cards": cards,
+            "recent": recent,
+        })
+
     # ------------------------- dashboard por tipo -------------------------
     def api_dashboard(self: Any) -> None:
         user = self.require_permission("dashboard.view")
@@ -1627,6 +3300,8 @@ def install_profiles(ns: dict[str, Any]) -> None:
                 "recent_transactions": [dict(row) for row in recent],
             })
             return
+        if user.get("profile_type") != "internet_sales":
+            return generic_dashboard(self, user)
         return original_dashboard(self)
 
     # ------------------------- auditoria e integrações por perfil -------------------------
@@ -1819,6 +3494,8 @@ def install_profiles(ns: dict[str, Any]) -> None:
             return self.api_profiles()
         if path == "/api/cash":
             return self.api_cash(query)
+        if path == "/api/profile-records":
+            return self.api_profile_records(query)
         return original_route_get(self)
 
     def route_write(self: Any, method: str) -> None:
@@ -1838,6 +3515,10 @@ def install_profiles(ns: dict[str, Any]) -> None:
             return self.api_cash_create(user)
         if method == "PUT" and path.startswith("/api/cash/"):
             return self.api_cash_update(user, int(path.rsplit("/", 1)[1]))
+        if method == "POST" and path == "/api/profile-records":
+            return self.api_profile_record_create(user)
+        if method == "PUT" and path.startswith("/api/profile-records/"):
+            return self.api_profile_record_update(user, int(path.rsplit("/", 1)[1]))
         return original_route_write(self, method)
 
     # Instala métodos e sobrescritas.
@@ -1870,6 +3551,9 @@ def install_profiles(ns: dict[str, Any]) -> None:
     Handler.api_cash = api_cash
     Handler.api_cash_create = api_cash_create
     Handler.api_cash_update = api_cash_update
+    Handler.api_profile_records = api_profile_records
+    Handler.api_profile_record_create = api_profile_record_create
+    Handler.api_profile_record_update = api_profile_record_update
     Handler.api_dashboard = api_dashboard
     Handler.api_audit = api_audit
     Handler.api_integrations_get = api_integrations_get

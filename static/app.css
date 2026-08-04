@@ -318,3 +318,16 @@ html[data-theme="light"] .auth-footer{border-top-color:#dce7ea;color:#7c9096}
 .profile-module-summary{display:flex;flex-wrap:wrap;gap:8px;margin-top:9px}
 
 .preset-preview-card{display:grid;gap:10px;padding:15px 16px;border:1px solid var(--line);border-radius:12px;background:linear-gradient(135deg,rgba(10,28,35,.82),rgba(12,22,28,.58))}.preset-preview-head{display:flex;align-items:center;justify-content:space-between;gap:12px}.preset-preview-head>div{display:grid;gap:3px}.preset-preview-head small,.preset-recommended small{color:#7f989f;text-transform:uppercase;letter-spacing:.08em;font-size:10px}.preset-preview-head strong{font-size:15px;color:#eef7f8}.preset-preview-card p{margin:0;color:#b8c9cd;line-height:1.55}.preset-recommended{display:grid;gap:4px;padding-top:9px;border-top:1px solid rgba(108,139,148,.22)}.preset-recommended span{color:#d5e2e4;font-size:13px;line-height:1.45}
+
+/* ONE CRM 2.2 · Presets operacionais completos */
+.preset-assets-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;padding-top:4px}
+.preset-assets-grid section{display:grid;align-content:start;gap:8px;min-width:0;padding:12px;border:1px solid rgba(108,139,148,.22);border-radius:10px;background:rgba(8,21,27,.38)}
+.preset-assets-grid section>small{color:#7f989f;text-transform:uppercase;letter-spacing:.07em;font-size:9px}
+.preset-assets-grid section>div{display:flex;flex-wrap:wrap;gap:6px}
+.preset-chip{display:inline-flex;align-items:center;min-height:25px;padding:5px 8px;border:1px solid color-mix(in srgb,var(--cyan) 25%,var(--line));border-radius:999px;background:color-mix(in srgb,var(--cyan) 7%,var(--surface-2));color:var(--text);font-size:10px;line-height:1.25}
+.record-summary-strip{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:16px}
+.record-summary-strip article{display:grid;gap:5px;min-height:78px;padding:14px 16px;border:1px solid var(--line);border-radius:12px;background:var(--panel);box-shadow:var(--shadow)}
+.record-summary-strip small{color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.06em}
+.record-summary-strip strong{font-size:24px;font-weight:600;color:var(--text)}
+html[data-theme="light"] .preset-assets-grid section{background:#f7fafb}
+@media(max-width:760px){.preset-assets-grid{grid-template-columns:1fr}}

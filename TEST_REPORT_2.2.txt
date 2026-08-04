@@ -1,0 +1,14 @@
+ONE CRM 2.2.0-beta.1
+
+Validações executadas:
+- Compilação completa dos arquivos Python: OK
+- Validação sintática de static/app.js com Node.js: OK
+- Smoke test funcional: OK
+- Isolamento multi-perfil e Contratante somente leitura: OK
+- Preset imobiliário com abas, cargos, catálogos e serviços próprios: OK
+- Criação e consulta de registros específicos do preset: OK
+- Provedores de IA e fallback local: OK
+- Modo online/Railway: OK
+
+Observação:
+Os testes utilizam banco temporário e não alteram o banco real do usuário.

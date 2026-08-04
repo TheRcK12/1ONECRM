@@ -43,9 +43,15 @@ const has = permission => state.user?.is_platform_owner || baseRole(state.user) 
 const isPlatformOwner = () => Boolean(state.user?.is_platform_owner);
 const isReadOnlyContractor = () => Boolean(state.user?.is_contractor && !state.user?.is_platform_owner);
 const activeProfile = () => state.user?.profile || {};
+const activePreset = () => activeProfile().preset || {};
 const activeModules = () => new Set(activeProfile().modules || []);
 const routeModuleMap = {dashboard:'dashboard',sales:'sales','new-sale':'sales',bko:'bko',daily:'daily',powerbi:'powerbi',ranking:'ranking',intelligence:'intelligence',users:'users',teams:'teams',plans:'plans',catalogs:'catalogs',roles:'roles',audit:'audit',backups:'backups',integrations:'integrations',cash:'cash','profile-settings':'users'};
-const moduleEnabled = route => route === 'profiles' ? isPlatformOwner() : activeModules().has(routeModuleMap[route] || route);
+const moduleEnabled = route => {
+  if (route === 'profiles') return isPlatformOwner();
+  if (route === 'plans') return activeModules().has('plans') || activeModules().has('services_catalog');
+  return activeModules().has(routeModuleMap[route] || route);
+};
+const presetLabel = (key, fallback='') => activePreset().navigation_labels?.[key] || fallback || key;
 const currentTheme = () => document.documentElement.dataset.theme === 'light' ? 'light' : 'dark';
 function updateThemeUi() {
   const light = currentTheme() === 'light';
@@ -272,11 +278,25 @@ const salesNavigationItems = [
   {id:'bko',label:'Gestão BKO',icon:'◎',permission:'workflow.bko'},
 ];
 
+const genericOperationIds = [
+  'clients','service_orders','schedule','leads','opportunities','tasks','debtors','negotiations','agreements',
+  'customers','tickets','followups','properties','real_estate_leads','visits','proposals','products','orders','stock',
+  'projects','deliverables','vacancies','candidates','interviews'
+];
+const genericOperationItems = genericOperationIds.map(id=>({
+  id,label:id.replaceAll('_',' '),icon:'◇',test:()=>has(`${id}.view`)||has(`${id}.manage`)
+}));
+const financeNavigationItems = [
+  {id:'cash',label:'Caixa',icon:'¤',permission:'cash.view'},
+  {id:'accounts_payable',label:'Contas a pagar',icon:'↓',test:()=>has('accounts_payable.view')||has('accounts_payable.manage')},
+  {id:'accounts_receivable',label:'Contas a receber',icon:'↑',test:()=>has('accounts_receivable.view')||has('accounts_receivable.manage')},
+];
+
 const administrativeNavigationItems = [
   {id:'profile-settings',label:'Perfil atual',icon:'◈',test:()=>isPlatformOwner()||has('profile.view')},
   {id:'users',label:'Funcionários',icon:'♙',permission:'users.view'},
   {id:'teams',label:'Equipes',icon:'◫',test:()=>has('teams.view')||has('teams.manage')},
-  {id:'plans',label:'Planos',icon:'▱',test:()=>has('plans.view')||has('plans.manage')},
+  {id:'plans',label:'Planos e serviços',icon:'▱',test:()=>has('plans.view')||has('plans.manage')},
   {id:'catalogs',label:'Catálogos',icon:'⚙',test:()=>has('catalogs.view')||has('catalogs.manage')},
   {id:'roles',label:'Cargos e permissões',icon:'⌘',test:()=>has('roles.view')||has('roles.manage')},
   {id:'audit',label:'Auditoria',icon:'◷',permission:'audit.view'},
@@ -288,13 +308,20 @@ const navigationItems = [
   {id:'profiles',label:'Perfis',icon:'▦',test:()=>isPlatformOwner()},
   {id:'dashboard',label:'Dashboard',icon:'⌂',permission:'dashboard.view'},
   {id:'sales-group',label:'Vendas',icon:'▤',children:salesNavigationItems},
+  {id:'operation-group',label:'Operação',icon:'◆',children:genericOperationItems},
+  {id:'finance-group',label:'Financeiro',icon:'¤',children:financeNavigationItems},
   {id:'daily',label:'Análise do dia',icon:'↗',permission:'daily.view'},
   {id:'powerbi',label:'Power BI',icon:'▥',permission:'powerbi.view'},
   {id:'ranking',label:'Ranking',icon:'◇',test:()=>has('ranking.own')||has('ranking.all')},
-  {id:'cash',label:'Caixa',icon:'¤',permission:'cash.view'},
   {id:'intelligence',label:'Inteligência',icon:'✦',permission:'intelligence.view'},
   {id:'administrative-group',label:'Administrativo',icon:'⚙',children:administrativeNavigationItems},
 ];
+
+function navigationItemLabel(item) {
+  if (item.id === 'operation-group') return activePreset().operation_group_label || 'Operação';
+  if (item.id === 'finance-group') return activePreset().operation_group_label === 'Financeiro' ? 'Financeiro' : item.label;
+  return presetLabel(item.id, item.label);
+}
 
 function menuAllowed(item) {
   const allowed = item.test ? item.test() : item.permission ? has(item.permission) : true;
@@ -335,11 +362,11 @@ function openNavigationPopover(button, group) {
   popover.dataset.group = group.id;
   popover.setAttribute('role','menu');
   popover.innerHTML = `
-    <div class="nav-popover-head"><span>${esc(group.label)}</span><small>${children.length} opção(ões)</small></div>
+    <div class="nav-popover-head"><span>${esc(navigationItemLabel(group))}</span><small>${children.length} opção(ões)</small></div>
     <div class="nav-popover-grid">${children.map(item => `
       <button class="nav-popover-item" type="button" data-popover-route="${item.id}" role="menuitem">
         <span class="nav-popover-icon">${item.icon}</span>
-        <span><strong>${esc(item.label)}</strong><small>${esc(navigationDescription(item))}</small></span>
+        <span><strong>${esc(navigationItemLabel(item))}</strong><small>${esc(navigationDescription(item))}</small></span>
       </button>`).join('')}</div>`;
   document.body.appendChild(popover);
   const rect = button.getBoundingClientRect();
@@ -361,9 +388,9 @@ function renderContextSubnav(active) {
   if (!group) { container.innerHTML=''; container.classList.add('hidden'); return; }
   const children = visibleChildren(group);
   container.classList.remove('hidden');
-  container.innerHTML = `<span class="context-subnav-label">${esc(group.label)}</span>${children.map(item => `
+  container.innerHTML = `<span class="context-subnav-label">${esc(navigationItemLabel(group))}</span>${children.map(item => `
     <button class="context-subnav-item ${active===item.id?'active':''}" type="button" data-context-route="${item.id}" ${active===item.id?'aria-current="page"':''}>
-      <span>${item.icon}</span>${esc(item.label)}
+      <span>${item.icon}</span>${esc(navigationItemLabel(item))}
     </button>`).join('')}`;
   $$('[data-context-route]',container).forEach(button=>button.addEventListener('click',()=>navigate(button.dataset.contextRoute)));
   requestAnimationFrame(()=>container.querySelector('.context-subnav-item.active')?.scrollIntoView({block:'nearest',inline:'center'}));
@@ -379,7 +406,7 @@ function renderTopMenu(active) {
     return `<button class="top-nav-item ${activeItem?'active':''} ${grouped?'has-children':''}" type="button"
       ${grouped?`data-nav-group="${item.id}" aria-haspopup="menu" aria-expanded="false"`:`data-top-route="${item.id}"`}
       ${activeItem?'aria-current="page"':''}>
-      <span class="top-nav-icon">${item.icon}</span><span>${esc(item.label)}</span>${grouped?'<span class="nav-chevron">⌄</span>':''}
+      <span class="top-nav-icon">${item.icon}</span><span>${esc(navigationItemLabel(item))}</span>${grouped?'<span class="nav-chevron">⌄</span>':''}
     </button>`;
   }).join('');
   $$('[data-top-route]',container).forEach(button=>button.addEventListener('click',()=>navigate(button.dataset.topRoute)));
@@ -430,6 +457,9 @@ async function renderRoute() {
       'profile-settings': renderProfileSettings,
       account: renderAccount,
     };
+    if (genericOperationIds.includes(route) || ['accounts_payable','accounts_receivable'].includes(route)) {
+      return renderProfileRecords(route, params);
+    }
     if (!handlers[route]) return navigate('dashboard');
     await handlers[route]();
   } catch (error) {
@@ -609,6 +639,16 @@ async function renderDashboard() {
     $('#dashboard-new-cash')?.addEventListener('click',()=>openCashForm());
     $('#dashboard-view-cash')?.addEventListener('click',()=>navigate('cash'));
     $('#cash-open-all')?.addEventListener('click',()=>navigate('cash'));
+    return;
+  }
+  if (data.generic) {
+    const cards = data.cards || [];
+    const recent = data.recent || [];
+    const operationLabel = data.preset?.operation_group_label || 'Operação';
+    $('#content').innerHTML = `
+      <section class="dashboard-hero"><div><p class="eyebrow">${esc(String(operationLabel).toUpperCase())}</p><h1>Olá, ${esc(visibleName)}</h1><p>Resumo do perfil ${esc(activeProfile().name||'')} sem indicadores de outros segmentos.</p></div></section>
+      <section class="dashboard-metrics">${cards.length ? cards.map(card=>`<article class="stat-card compact" style="--accent:var(--cyan)"><div class="stat-top"><span>${esc(card.label)}</span><span class="stat-icon">◇</span></div><div class="stat-value">${card.total}</div><div class="stat-note">${card.overdue?`${card.overdue} prazo(s) vencido(s)`:card.amount?money(card.amount):'Registros ativos'}</div><button class="metric-link" onclick="navigate('${card.module}')">Abrir módulo</button></article>`).join('') : '<article class="stat-card compact"><div class="stat-note">Este perfil ainda não possui registros operacionais.</div></article>'}</section>
+      <section class="panel"><header class="panel-head"><div><h3>Atualizações recentes</h3><small class="muted">Movimentações dos módulos deste preset</small></div></header>${genericRecordTable(recent,{compact:true})}</section>`;
     return;
   }
   const c = data.cards;
@@ -1130,19 +1170,30 @@ function profileTypeLabel(code) {
   })[code] || code;
 }
 
+function templateModuleLabel(template,module) {
+  const direct=template?.navigation_labels?.[module];
+  if(direct)return direct;
+  const record=template?.records?.[module];
+  if(record?.label)return record.label;
+  if(module==='services_catalog')return template?.admin_labels?.plans_title||'Serviços';
+  return ({dashboard:'Dashboard',sales:'Vendas',bko:'Gestão BKO',daily:'Análise do dia',ranking:'Ranking',intelligence:'Inteligência',powerbi:'Power BI',users:'Funcionários',teams:'Equipes',plans:'Planos',catalogs:'Catálogos',roles:'Cargos e permissões',audit:'Auditoria',integrations:'Integrações',cash:'Controle de caixa'})[module] || String(module).replaceAll('_',' ');
+}
 function profileTemplatePreview(template) {
   if (!template) return '';
   const modules = template.modules || [];
   return `<div class="preset-preview-card">
-    <div class="preset-preview-head"><div><small>Categoria</small><strong>${esc(template.category || 'Perfil')}</strong></div><span class="badge cyan">${modules.length} módulos</span></div>
+    <div class="preset-preview-head"><div><small>Categoria</small><strong>${esc(template.category || 'Perfil')}</strong></div><span class="badge cyan">Preset completo</span></div>
     <p>${esc(template.description || '')}</p>
     <div class="preset-recommended"><small>Indicado para</small><span>${esc(template.recommended_for || 'Operações personalizadas.')}</span></div>
+    <div class="preset-assets-grid">
+      <section><small>Abas incluídas</small><div>${modules.map(module=>`<span class="preset-chip">${esc(templateModuleLabel(template,module))}</span>`).join('')}</div></section>
+      <section><small>Cargos iniciais</small><div>${(template.roles||[]).length?(template.roles||[]).map(role=>`<span class="preset-chip">${esc(role.name)}</span>`).join(''):'<span class="muted">Definidos manualmente</span>'}</div></section>
+      <section><small>Catálogos e status</small><div>${(template.catalogs||[]).length?(template.catalogs||[]).map(cat=>`<span class="preset-chip">${esc(cat.label)}</span>`).join(''):'<span class="muted">Sem catálogo inicial</span>'}</div></section>
+      <section><small>Planos/serviços sugeridos</small><div>${(template.offerings||[]).length?(template.offerings||[]).map(item=>`<span class="preset-chip">${esc(item.name)}</span>`).join(''):'<span class="muted">Cadastro livre</span>'}</div></section>
+    </div>
   </div>`;
 }
-
-function moduleLabel(module) {
-  return ({dashboard:'Dashboard',sales:'Vendas',bko:'Gestão BKO',daily:'Análise do dia',ranking:'Ranking',intelligence:'Inteligência',powerbi:'Power BI',users:'Funcionários',teams:'Equipes',plans:'Planos',catalogs:'Catálogos',roles:'Cargos e permissões',audit:'Auditoria',integrations:'Integrações',cash:'Controle de caixa'})[module] || module;
-}
+function moduleLabel(module) { return templateModuleLabel(activePreset(),module); }
 
 async function renderProfiles() {
   if (!isPlatformOwner()) return navigate('dashboard');
@@ -1172,26 +1223,16 @@ async function switchProfile(profileId) {
   refreshUserUi(); navigate('dashboard'); await renderRoute();
 }
 
-function profileModuleOptions(selected=[]) {
-  const options = [
-    ['dashboard','Dashboard','Visão geral dos indicadores e do resumo do perfil.'],
-    ['sales','Vendas','Cadastros, acompanhamento comercial e funil principal.'],
-    ['bko','Gestão BKO','Tratamento operacional, ativação, biometria e instalação.'],
-    ['daily','Análise do dia','Apuração diária por equipes, status e produtividade.'],
-    ['ranking','Ranking','Comparativo de desempenho entre vendedores e equipes.'],
-    ['cash','Controle de caixa','Entradas, saídas, saldo e lançamentos financeiros.'],
-    ['intelligence','Inteligência','Assistente operacional com análises do ambiente.'],
-    ['powerbi','Power BI','Acesso ao painel incorporado e indicadores externos.'],
-    ['users','Funcionários','Gestão da lista de usuários vinculados ao perfil.'],
-    ['teams','Equipes','Estruturação de equipes e responsáveis do ambiente.'],
-    ['plans','Planos','Cadastro e organização de planos, serviços e ofertas.'],
-    ['catalogs','Catálogos','Listas auxiliares, status e parâmetros do perfil.'],
-    ['roles','Cargos','Matriz de cargos e permissões disponíveis no ambiente.'],
-    ['audit','Auditoria','Consulta dos registros de auditoria e histórico.'],
-    ['integrations','Integrações','Webhooks, chaves e conectores externos do perfil.']
-  ];
+function profileModuleOptions(selected=[],template=activePreset()) {
+  const modules=template?.modules?.length?template.modules:selected;
+  const descriptions={dashboard:'Visão geral dos indicadores do perfil.',daily:'Análises e consolidação do período.',ranking:'Comparativo de desempenho da equipe.',intelligence:'Assistente e análise operacional.',users:'Usuários vinculados ao perfil.',teams:'Equipes e responsáveis.',catalogs:'Status e listas usadas pelo preset.',roles:'Cargos e permissões iniciais.',audit:'Histórico de alterações.',integrations:'Conectores e automações externas.',powerbi:'Painel incorporado.',cash:'Entradas, saídas e saldo.',plans:'Produtos, planos e serviços.',services_catalog:'Serviços e ofertas do segmento.'};
   const set=new Set(selected);
-  return options.map(([code,label,description])=>`<label class="module-toggle-item"><span class="module-toggle-info"><strong>${label}</strong><small>${description}</small></span><span class="module-toggle-control"><input type="checkbox" name="modules" value="${code}" ${set.has(code)?'checked':''}></span></label>`).join('');
+  return modules.map(code=>{
+    const record=template?.records?.[code];
+    const label=templateModuleLabel(template,code);
+    const description=record?.description||descriptions[code]||`Módulo específico de ${String(label).toLowerCase()}.`;
+    return `<label class="module-toggle-item"><span class="module-toggle-info"><strong>${esc(label)}</strong><small>${esc(description)}</small></span><span class="module-toggle-control"><input type="checkbox" name="modules" value="${esc(code)}" ${set.has(code)?'checked':''}></span></label>`;
+  }).join('');
 }
 
 function openProfileForm(id=null) {
@@ -1205,14 +1246,14 @@ function openProfileForm(id=null) {
     <label class="full">Descrição<textarea name="description" placeholder="Você pode manter a descrição do preset ou escrever uma descrição própria.">${esc(profile?.description||'')}</textarea></label>
     <label>Contratante<select name="contractor_user_id">${optionList(contractors,profile?.contractor_user_id,'Sem contratante')}</select></label>
     ${id?`<label class="switch-row">Perfil ativo<input type="checkbox" name="active" ${profile.active?'checked':''}></label>`:''}
-    <fieldset class="full permission-group"><legend>Módulos habilitados</legend><div class="permission-grid" id="profile-module-grid">${profileModuleOptions(profile?.modules||template.modules)}</div></fieldset>
+    <fieldset class="full permission-group"><legend>Módulos habilitados</legend><div class="permission-grid" id="profile-module-grid">${profileModuleOptions(profile?.modules||template.modules,template)}</div></fieldset>
     <div class="full page-actions" style="justify-content:flex-end"><button type="button" class="btn ghost" data-close-modal>Cancelar</button><button class="btn primary">Salvar perfil</button></div>
   </form>`,{wide:true});
   $$('[data-close-modal]').forEach(el=>el.addEventListener('click',closeModal));
   const typeSelect=$('#profile-form [name="business_type"]');
   typeSelect?.addEventListener('change',()=>{
     const t=state.profileTemplates.find(item=>item.code===typeSelect.value);
-    $('#profile-module-grid').innerHTML=profileModuleOptions(t?.modules||[]);
+    $('#profile-module-grid').innerHTML=profileModuleOptions(t?.modules||[],t);
     $('#profile-preset-preview').innerHTML=profileTemplatePreview(t);
   });
   $('#profile-form').addEventListener('submit',async event=>{
@@ -1249,12 +1290,84 @@ async function renderProfileSettings() {
       <label>Nome do perfil<input name="name" required value="${esc(profile.name||'')}"></label>
       <label>Tipo<input value="${esc(profileTypeLabel(profile.business_type))}" disabled></label>
       <label class="full">Descrição<textarea name="description">${esc(profile.description||'')}</textarea></label>
-      <fieldset class="full permission-group"><legend>Módulos do perfil</legend><div class="permission-grid">${profileModuleOptions(profile.modules||[])}</div></fieldset>
+      <fieldset class="full permission-group"><legend>Módulos do perfil</legend><div class="permission-grid">${profileModuleOptions(profile.modules||[],activePreset())}</div></fieldset>
       <div class="full page-actions" style="justify-content:flex-end"><button class="btn primary">Salvar configurações</button></div>
     </form></section>`;
   $('#profile-settings-form').addEventListener('submit',async event=>{
     event.preventDefault();const payload=formObject(event.currentTarget);payload.modules=$$('input[name="modules"]:checked',event.currentTarget).map(input=>input.value);
     try{await api(`/api/profiles/${profile.id}`,{method:'PUT',body:payload});const data=await api('/api/bootstrap');state.user=data.user;state.csrf=data.csrf_token;refreshUserUi();toast('Perfil atualizado.');renderRoute();}catch(error){toast(error.message,'error');}
+  });
+}
+
+function activeRecordConfig(module) {
+  return activePreset().records?.[module] || null;
+}
+function recordStatusLabel(config, value) {
+  if (!value) return 'Sem status';
+  const direct = (config?.status_options || []).find(item => String(item[0]) === String(value));
+  if (direct) return direct[1];
+  const category = config?.status_category;
+  const item = (state.catalogs?.[category] || []).find(item => String(item.code) === String(value));
+  return item?.label || String(value).replace(/^p\d+_/,'').replaceAll('_',' ');
+}
+function genericRecordTable(rows,{compact=false,module=null,config=null,canManage=false}={}) {
+  if(!rows?.length)return '<div class="empty">Nenhum registro encontrado.</div>';
+  return `<div class="table-wrap"><table class="data-table"><thead><tr><th>Registro</th><th>Status</th><th>Responsável</th><th>Prazo</th><th>Valor</th>${compact?'':'<th></th>'}</tr></thead><tbody>${rows.map(item=>{
+    const cfg=config||activeRecordConfig(item.module_code)||{};
+    return `<tr><td><div class="cell-main">${esc(item.title)}</div><div class="cell-sub">${esc(item.subtitle||cfg.singular||item.module_code||'')}</div></td><td>${badge(recordStatusLabel(cfg,item.status),item.status)}</td><td>${esc(item.assigned_user_name||'Não definido')}</td><td>${item.due_date?fmtDate(item.due_date):'-'}</td><td>${Number(item.amount||0)?money(item.amount):'-'}</td>${compact?'':`<td>${canManage?`<button class="btn small" data-record-edit="${item.id}">Editar</button>`:''}</td>`}</tr>`;
+  }).join('')}</tbody></table></div>`;
+}
+function recordStatusOptions(config, selected='') {
+  if (config?.status_category) return catalogOptions(config.status_category,selected,'Selecione o status');
+  return `<option value="">Selecione o status</option>${(config?.status_options||[]).map(item=>`<option value="${esc(item[0])}" ${String(item[0])===String(selected)?'selected':''}>${esc(item[1])}</option>`).join('')}`;
+}
+function recordCustomField(field,value='') {
+  if(field.type==='catalog') return `<label>${esc(field.label)}<select data-record-field="${esc(field.key)}">${catalogOptions(field.category,value,'Selecione...')}</select></label>`;
+  if(field.type==='number') return `<label>${esc(field.label)}<input type="number" step="0.01" data-record-field="${esc(field.key)}" value="${esc(value??'')}"></label>`;
+  if(field.type==='date') return `<label>${esc(field.label)}<input type="date" data-record-field="${esc(field.key)}" value="${esc(value||'')}"></label>`;
+  return `<label>${esc(field.label)}<input data-record-field="${esc(field.key)}" placeholder="${esc(field.placeholder||'')}" value="${esc(value||'')}"></label>`;
+}
+async function renderProfileRecords(module,params=new URLSearchParams()) {
+  const config=activeRecordConfig(module);
+  if(!config)return navigate('dashboard');
+  setPage(config.label,activePreset().operation_group_label||'OPERAÇÃO');
+  await ensureReferenceData();
+  const search=params.get('search')||'';
+  const data=await api(`/api/profile-records?${qs({module,all:1,search})}`);
+  const records=data.records||[];
+  const canManage=Boolean(data.can_manage);
+  const summary=data.summary||{total:records.length,by_status:[]};
+  $('#content').innerHTML=`<div class="page-head"><div><h1>${esc(config.label)}</h1><p class="muted">${esc(config.description||'Registros exclusivos deste perfil.')}</p></div>${canManage?`<button class="btn primary" id="new-profile-record">＋ Novo ${esc(String(config.singular||'registro').toLowerCase())}</button>`:badge('Somente leitura','cyan')}</div>
+    <section class="record-summary-strip"><article><small>Total</small><strong>${summary.total||0}</strong></article>${(summary.by_status||[]).slice(0,4).map(item=>`<article><small>${esc(recordStatusLabel(config,item.status))}</small><strong>${item.total}</strong></article>`).join('')}</section>
+    <section class="panel"><header class="panel-head"><form id="record-search" class="inline-form"><input name="search" value="${esc(search)}" placeholder="Buscar em ${esc(String(config.label).toLowerCase())}"><button class="btn small">Buscar</button></form></header>${genericRecordTable(records,{module,config,canManage})}</section>`;
+  $('#new-profile-record')?.addEventListener('click',()=>openProfileRecordForm(module,null,records));
+  $$('[data-record-edit]').forEach(button=>button.addEventListener('click',()=>openProfileRecordForm(module,Number(button.dataset.recordEdit),records)));
+  $('#record-search')?.addEventListener('submit',event=>{event.preventDefault();navigate(module,qs({search:new FormData(event.currentTarget).get('search')}));});
+}
+async function openProfileRecordForm(module,id=null,records=[]) {
+  await ensureReferenceData();
+  const config=activeRecordConfig(module);
+  const item=id?records.find(row=>row.id===id):{};
+  const assigned=state.users||[];
+  modal(id?`Editar ${config.singular}`:`Novo ${config.singular}`,`<form id="profile-record-form" class="form-grid">
+    <label class="full">${esc(config.title_label||`Nome/Identificação de ${String(config.singular).toLowerCase()}`)}<input name="title" required value="${esc(item?.title||'')}"></label>
+    <label>Status<select name="status">${recordStatusOptions(config,item?.status||'')}</select></label>
+    <label>Responsável<select name="assigned_user_id">${optionList(assigned,item?.assigned_user_id,'Sem responsável')}</select></label>
+    ${config.due_label!==false?`<label>${esc(config.due_label||'Prazo/Data')}<input type="date" name="due_date" value="${esc(item?.due_date||'')}"></label>`:''}
+    ${config.amount_label!==false?`<label>${esc(config.amount_label||'Valor')}<input type="number" min="0" step="0.01" name="amount" value="${esc(item?.amount??'')}"></label>`:''}
+    ${(config.fields||[]).map(field=>recordCustomField(field,item?.data?.[field.key])).join('')}
+    <label class="full">Resumo complementar<input name="subtitle" value="${esc(item?.subtitle||'')}"></label>
+    <label class="full">Observações<textarea name="notes">${esc(item?.notes||'')}</textarea></label>
+    ${id?`<label class="switch-row full">Registro ativo<input type="checkbox" name="active" ${item.active?'checked':''}></label>`:''}
+    <div class="full page-actions" style="justify-content:flex-end"><button type="button" class="btn ghost" data-close-modal>Cancelar</button><button class="btn primary">Salvar</button></div>
+  </form>`,{wide:true});
+  $$('[data-close-modal]').forEach(el=>el.addEventListener('click',closeModal));
+  $('#profile-record-form').addEventListener('submit',async event=>{
+    event.preventDefault();const payload=formObject(event.currentTarget);payload.module=module;payload.data={};
+    $$('[data-record-field]',event.currentTarget).forEach(input=>payload.data[input.dataset.recordField]=input.value);
+    payload.assigned_user_id=payload.assigned_user_id?Number(payload.assigned_user_id):null;
+    payload.amount=Number(payload.amount||0);
+    try{await api(id?`/api/profile-records/${id}`:'/api/profile-records',{method:id?'PUT':'POST',body:payload});closeModal();toast(`${config.singular} salvo.`);renderProfileRecords(module);}catch(error){toast(error.message,'error');}
   });
 }
 
@@ -1362,39 +1475,44 @@ function openTeamForm(id=null) {
   $('#team-form').addEventListener('submit',async e=>{e.preventDefault();try{await api(id?`/api/teams/${id}`:'/api/teams',{method:id?'PUT':'POST',body:formObject(e.currentTarget)});closeModal();state.teams=[];toast('Equipe salva.');renderTeams();}catch(error){toast(error.message,'error');}});
 }
 
+function offeringsUi() {
+  return {plans_title:'Planos e serviços',plans_singular:'plano',provider:'Operadora',service:'Serviço',attribute:'Velocidade',coverage:'UFs disponíveis',...(activePreset().admin_labels||{})};
+}
 async function renderPlans() {
-  setPage('Planos','CATÁLOGO COMERCIAL');
+  const ui=offeringsUi();
+  setPage(ui.plans_title,'CATÁLOGO DO PERFIL');
   await ensureReferenceData();
   const data=await api('/api/plans?all=1');state.plans=data.plans;
   const canManage=has('plans.manage');
   $('#content').innerHTML=`
-    <div class="page-head"><div><h1>Planos e serviços</h1><p class="muted">${canManage?'O cadastro alimenta diretamente o formulário de venda.':'Visualização dos planos cadastrados no perfil atual.'}</p></div>${canManage?'<button class="btn primary" id="new-plan">＋ Novo plano</button>':badge('Somente leitura','cyan')}</div>
-    <section class="panel"><div class="table-wrap"><table class="data-table"><thead><tr><th>Plano</th><th>Operadora</th><th>Serviço</th><th>Velocidade</th><th>Preço</th><th>UFs</th><th>Status</th>${canManage?'<th></th>':''}</tr></thead><tbody>${state.plans.map(p=>`<tr><td><div class="cell-main">${esc(p.name)}</div><div class="cell-sub">${esc(p.benefits||'')}</div></td><td>${esc(p.provider)}</td><td>${esc(p.service)}</td><td>${esc(p.speed||'-')}</td><td>${money(p.price)}</td><td>${esc(p.uf_list||'Todas')}</td><td>${p.active?badge('Ativo','ok'):badge('Inativo','cancelada')}</td>${canManage?`<td><button class="btn small" onclick="openPlanForm(${p.id})">Editar</button></td>`:''}</tr>`).join('')}</tbody></table></div></section>`;
+    <div class="page-head"><div><h1>${esc(ui.plans_title)}</h1><p class="muted">${canManage?`Cadastros recomendados para o preset ${esc(activePreset().name||'atual')}.`:`Visualização dos itens cadastrados no perfil atual.`}</p></div>${canManage?`<button class="btn primary" id="new-plan">＋ Novo ${esc(ui.plans_singular)}</button>`:badge('Somente leitura','cyan')}</div>
+    <section class="panel"><div class="table-wrap"><table class="data-table"><thead><tr><th>${esc(String(ui.plans_singular).replace(/^./,c=>c.toUpperCase()))}</th><th>${esc(ui.provider)}</th><th>${esc(ui.service)}</th><th>${esc(ui.attribute)}</th><th>Preço</th><th>${esc(ui.coverage)}</th><th>Status</th>${canManage?'<th></th>':''}</tr></thead><tbody>${state.plans.map(p=>`<tr><td><div class="cell-main">${esc(p.name)}</div><div class="cell-sub">${esc(p.benefits||'')}</div></td><td>${esc(p.provider)}</td><td>${esc(p.service)}</td><td>${esc(p.speed||'-')}</td><td>${money(p.price)}</td><td>${esc(p.uf_list||'Todas')}</td><td>${p.active?badge('Ativo','ok'):badge('Inativo','cancelada')}</td>${canManage?`<td><button class="btn small" onclick="openPlanForm(${p.id})">Editar</button></td>`:''}</tr>`).join('')}</tbody></table></div></section>`;
   $('#new-plan')?.addEventListener('click',()=>openPlanForm());
 }
-
 function openPlanForm(id=null) {
-  const p=id?state.plans.find(x=>x.id===id):{};
-  modal(id?'Editar plano':'Novo plano',`<form id="plan-form" class="form-grid">
-    <label>Operadora<input name="provider" required value="${esc(p?.provider||'')}"></label>
-    <label>Serviço<input name="service" required value="${esc(p?.service||'')}"></label>
-    <label>Nome do plano<input name="name" required value="${esc(p?.name||'')}"></label>
-    <label>Velocidade<input name="speed" value="${esc(p?.speed||'')}"></label>
+  const p=id?state.plans.find(x=>x.id===id):{};const ui=offeringsUi();
+  modal(id?`Editar ${ui.plans_singular}`:`Novo ${ui.plans_singular}`,`<form id="plan-form" class="form-grid">
+    <label>${esc(ui.provider)}<input name="provider" required value="${esc(p?.provider||'')}"></label>
+    <label>${esc(ui.service)}<input name="service" required value="${esc(p?.service||'')}"></label>
+    <label>Nome<input name="name" required value="${esc(p?.name||'')}"></label>
+    <label>${esc(ui.attribute)}<input name="speed" value="${esc(p?.speed||'')}"></label>
     <label>Preço<input name="price" required inputmode="decimal" value="${esc(p?.price??'')}"></label>
     <label>Ordem<input type="number" name="sort_order" value="${p?.sort_order||0}"></label>
-    <label class="full">Benefícios<textarea name="benefits">${esc(p?.benefits||'')}</textarea></label>
-    <label class="full">UFs disponíveis <small class="muted">Separadas por vírgula; vazio significa todas.</small><input name="uf_list" value="${esc(p?.uf_list||'')}"></label>
-    <label class="switch-row full">Plano ativo<input type="checkbox" name="active" ${p?.active!==0?'checked':''}></label>
+    <label class="full">Descrição/Benefícios<textarea name="benefits">${esc(p?.benefits||'')}</textarea></label>
+    <label class="full">${esc(ui.coverage)}<input name="uf_list" value="${esc(p?.uf_list||'')}"></label>
+    <label class="switch-row full">Item ativo<input type="checkbox" name="active" ${p?.active!==0?'checked':''}></label>
     <div class="full page-actions" style="justify-content:flex-end"><button type="button" class="btn ghost" data-close-modal>Cancelar</button><button class="btn primary">Salvar</button></div>
   </form>`);
   $$('[data-close-modal]').forEach(el=>el.addEventListener('click',closeModal));
-  $('#plan-form').addEventListener('submit',async e=>{e.preventDefault();try{await api(id?`/api/plans/${id}`:'/api/plans',{method:id?'PUT':'POST',body:formObject(e.currentTarget)});closeModal();state.plans=[];toast('Plano salvo.');renderPlans();}catch(error){toast(error.message,'error');}});
+  $('#plan-form').addEventListener('submit',async e=>{e.preventDefault();try{await api(id?`/api/plans/${id}`:'/api/plans',{method:id?'PUT':'POST',body:formObject(e.currentTarget)});closeModal();state.plans=[];toast('Cadastro salvo.');renderPlans();}catch(error){toast(error.message,'error');}});
 }
 
-const categoryLabels={provider:'Operadoras',service:'Serviços',sale_status:'Status da venda',activation_status:'Ativação',biometric_status:'Biometria',installation_status:'Instalação',appointment_status:'Agendamento',payment_method:'Formas de pagamento',due_day:'Vencimentos',sales_channel:'Canais de venda',period:'Períodos',property_type:'Tipos de imóvel',cancellation_reason:'Motivos de cancelamento'};
+const baseCategoryLabels={provider:'Operadoras',service:'Serviços',sale_status:'Status da venda',activation_status:'Ativação',biometric_status:'Biometria',installation_status:'Instalação',appointment_status:'Agendamento',payment_method:'Formas de pagamento',due_day:'Vencimentos',sales_channel:'Canais de venda',period:'Períodos',property_type:'Tipos de imóvel',cancellation_reason:'Motivos de cancelamento'};
+function currentCategoryLabels(){return {...baseCategoryLabels,...(activePreset().catalog_labels||{})};}
 async function renderCatalogs() {
   setPage('Catálogos','CONFIGURAÇÕES DO SISTEMA');
   const data=await api('/api/catalogs?all=1');state.catalogs=data.catalogs;
+  const categoryLabels=currentCategoryLabels();
   const categories=Object.keys({...categoryLabels,...state.catalogs});
   const canManage=has('catalogs.manage');
   $('#content').innerHTML=`
@@ -1403,6 +1521,7 @@ async function renderCatalogs() {
   $('#new-catalog')?.addEventListener('click',()=>openCatalogForm());
 }
 function openCatalogForm(id=null,category='') {
+  const categoryLabels=currentCategoryLabels();
   const all=Object.values(state.catalogs).flat();const item=id?all.find(x=>x.id===id):{};
   modal(id?'Editar item':'Novo item',`<form id="catalog-form" class="form-grid">
     <label>Categoria<input name="category" required ${id?'disabled':''} value="${esc(item?.category||category)}" list="categories-list"><datalist id="categories-list">${Object.keys(categoryLabels).map(x=>`<option value="${x}">`).join('')}</datalist></label>

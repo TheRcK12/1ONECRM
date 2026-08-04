@@ -142,3 +142,14 @@
 - Adicionados presets de perfis para venda de internet, caixa, serviços, CRM geral, cobrança, pós-venda, imobiliária, varejo, consultoria, recrutamento e perfil personalizado.
 - Cada preset possui categoria, descrição, indicação de uso e módulos recomendados.
 - Criação de perfil ganhou pré-visualização do preset e atualização automática dos módulos.
+
+## 2.2.0-beta.1
+
+- Presets deixam de ser apenas combinações de checkboxes e passam a montar uma estrutura operacional completa.
+- Cada segmento recebe somente as abas coerentes com seu negócio; módulos de venda de internet, como BKO e biometria, não aparecem em perfis imobiliários, financeiros ou de serviços.
+- Adicionados cargos iniciais específicos por preset, com permissões próprias.
+- Adicionados catálogos, status e listas iniciais de cada segmento.
+- Adicionados planos, produtos ou serviços recomendados conforme o preset.
+- Criado o cadastro genérico de registros por módulo para imóveis, visitas, propostas, ordens de serviço, chamados, projetos, vagas, candidatos, estoque e demais operações.
+- A Dashboard passa a resumir os módulos específicos do perfil ativo.
+- Perfis criados em versões anteriores recebem migração automática para a estrutura completa do preset escolhido.

@@ -1,6 +1,6 @@
 {
   "name": "ONE CRM",
-  "version": "2.1.0-beta.1",
+  "version": "2.2.0-beta.1",
   "channel": "beta-online",
-  "description": "Presets de perfis de negócio com módulos recomendados e criação guiada."
+  "description": "Presets completos com abas, cargos, catálogos, serviços e fluxos específicos por segmento."
 }
