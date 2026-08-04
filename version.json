@@ -1,6 +1,6 @@
 {
   "name": "ONE CRM",
-  "version": "2.0.1-beta.1",
+  "version": "2.0.2-beta.1",
   "channel": "beta-online",
-  "description": "Perfis isolados com Contratante administrativo somente leitura"
+  "description": "Ajuste visual dos módulos do perfil com linhas alinhadas e leitura mais segura."
 }

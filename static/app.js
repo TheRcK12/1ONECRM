@@ -1157,12 +1157,24 @@ async function switchProfile(profileId) {
 
 function profileModuleOptions(selected=[]) {
   const options = [
-    ['dashboard','Dashboard'],['sales','Vendas'],['bko','Gestão BKO'],['daily','Análise do dia'],['ranking','Ranking'],
-    ['cash','Controle de caixa'],['intelligence','Inteligência'],['powerbi','Power BI'],['users','Funcionários'],['teams','Equipes'],
-    ['plans','Planos'],['catalogs','Catálogos'],['roles','Cargos'],['audit','Auditoria'],['integrations','Integrações']
+    ['dashboard','Dashboard','Visão geral dos indicadores e do resumo do perfil.'],
+    ['sales','Vendas','Cadastros, acompanhamento comercial e funil principal.'],
+    ['bko','Gestão BKO','Tratamento operacional, ativação, biometria e instalação.'],
+    ['daily','Análise do dia','Apuração diária por equipes, status e produtividade.'],
+    ['ranking','Ranking','Comparativo de desempenho entre vendedores e equipes.'],
+    ['cash','Controle de caixa','Entradas, saídas, saldo e lançamentos financeiros.'],
+    ['intelligence','Inteligência','Assistente operacional com análises do ambiente.'],
+    ['powerbi','Power BI','Acesso ao painel incorporado e indicadores externos.'],
+    ['users','Funcionários','Gestão da lista de usuários vinculados ao perfil.'],
+    ['teams','Equipes','Estruturação de equipes e responsáveis do ambiente.'],
+    ['plans','Planos','Cadastro e organização de planos, serviços e ofertas.'],
+    ['catalogs','Catálogos','Listas auxiliares, status e parâmetros do perfil.'],
+    ['roles','Cargos','Matriz de cargos e permissões disponíveis no ambiente.'],
+    ['audit','Auditoria','Consulta dos registros de auditoria e histórico.'],
+    ['integrations','Integrações','Webhooks, chaves e conectores externos do perfil.']
   ];
   const set=new Set(selected);
-  return options.map(([code,label])=>`<label class="permission-check"><input type="checkbox" name="modules" value="${code}" ${set.has(code)?'checked':''}><span>${label}</span></label>`).join('');
+  return options.map(([code,label,description])=>`<label class="module-toggle-item"><span class="module-toggle-info"><strong>${label}</strong><small>${description}</small></span><span class="module-toggle-control"><input type="checkbox" name="modules" value="${code}" ${set.has(code)?'checked':''}></span></label>`).join('');
 }
 
 function openProfileForm(id=null) {
