@@ -1,3 +1,10 @@
+# 2.5.2-beta.1
+
+- Corrige modais e gavetas que fechavam ao clicar em inputs, selects, checkboxes ou áreas internas.
+- Remove manipuladores `onclick` inline incompatíveis com a Content Security Policy da versão de produção.
+- Adiciona eventos delegados seguros para navegação, edição e ações dinâmicas.
+- O fundo continua fechando a janela apenas quando clicado diretamente.
+
 # 2.5.1-beta.1
 
 - Corrige falha de build no Railway causada por `COPY data/.keep /app/data/.keep`.

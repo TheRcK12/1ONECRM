@@ -1,6 +1,6 @@
 {
   "name": "ONE CRM",
-  "version": "2.5.1-beta.1",
+  "version": "2.5.2-beta.1",
   "channel": "beta-online",
-  "description": "Hotfix do build Railway: remove dependência do arquivo data/.keep no Dockerfile e cria /app/data diretamente na imagem."
+  "description": "Corrige fechamento involuntário de modais e remove eventos JavaScript inline incompatíveis com a política CSP."
 }

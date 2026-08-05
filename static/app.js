@@ -237,28 +237,45 @@ function badge(label, code='') {
   return `<span class="badge ${color}"><span class="status-dot"></span>${esc(text)}</span>`;
 }
 
+function bindOverlayClose(backdropSelector) {
+  const root = $('#modal-root');
+  const backdrop = $(backdropSelector, root);
+  if (!backdrop) return;
+
+  // Fecha somente quando o clique ocorrer no fundo, nunca quando vier de um
+  // campo, select, botão ou qualquer elemento dentro do painel.
+  backdrop.addEventListener('click', event => {
+    if (event.target === backdrop) closeModal();
+  });
+  $$('[data-close-modal]', root).forEach(el => el.addEventListener('click', event => {
+    event.preventDefault();
+    event.stopPropagation();
+    closeModal();
+  }));
+}
+
 function modal(title, body, {wide=false, footer=''}={}) {
   $('#modal-root').innerHTML = `
-    <div class="modal-backdrop" data-close-modal>
-      <section class="modal ${wide?'wide':''}" onclick="event.stopPropagation()">
-        <header class="modal-head"><h3>${esc(title)}</h3><button class="icon-btn" data-close-modal>×</button></header>
+    <div class="modal-backdrop">
+      <section class="modal ${wide?'wide':''}" role="dialog" aria-modal="true" aria-label="${esc(title)}">
+        <header class="modal-head"><h3>${esc(title)}</h3><button type="button" class="icon-btn" data-close-modal aria-label="Fechar">×</button></header>
         <div class="modal-body">${body}</div>
         ${footer ? `<footer class="modal-foot">${footer}</footer>` : ''}
       </section>
     </div>`;
-  $$('[data-close-modal]').forEach(el => el.addEventListener('click', closeModal));
+  bindOverlayClose('.modal-backdrop');
 }
 function closeModal(){ $('#modal-root').innerHTML=''; }
 
 function drawer(title, body) {
   $('#modal-root').innerHTML = `
-    <div class="drawer-backdrop" data-close-modal>
-      <section class="drawer" onclick="event.stopPropagation()">
-        <header class="drawer-head"><h3>${esc(title)}</h3><button class="icon-btn" data-close-modal>×</button></header>
+    <div class="drawer-backdrop">
+      <section class="drawer" role="dialog" aria-modal="true" aria-label="${esc(title)}">
+        <header class="drawer-head"><h3>${esc(title)}</h3><button type="button" class="icon-btn" data-close-modal aria-label="Fechar">×</button></header>
         <div class="drawer-body">${body}</div>
       </section>
     </div>`;
-  $$('[data-close-modal]').forEach(el => el.addEventListener('click', closeModal));
+  bindOverlayClose('.drawer-backdrop');
 }
 
 async function ensureReferenceData() {
@@ -560,7 +577,7 @@ function refreshUserUi() {
         } catch(error) { toast(error.message,'error'); select.disabled=false; }
       });
     } else {
-      switcher.innerHTML = `<button type="button" class="profile-chip" ${isPlatformOwner()?'onclick="navigate(\'profiles\')"':''}><small>PERFIL ATUAL</small><strong>${esc(profile.name||'Sem perfil')}</strong></button>`;
+      switcher.innerHTML = `<button type="button" class="profile-chip" ${isPlatformOwner()?'data-route="profiles"':''}><small>PERFIL ATUAL</small><strong>${esc(profile.name||'Sem perfil')}</strong></button>`;
     }
   }
 }
@@ -618,7 +635,41 @@ updateThemeUi();
 $('#global-search-btn').addEventListener('click',openGlobalSearch);
 window.addEventListener('hashchange',renderRoute);
 window.addEventListener('keydown',event=>{ if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='k'){event.preventDefault();openGlobalSearch();} if(event.key==='Escape'){closeNavigationPopover();closeModal();} });
-document.addEventListener('click',event=>{if(!event.target.closest('#nav-popover')&&!event.target.closest('[data-nav-group]'))closeNavigationPopover();});
+document.addEventListener('click',event=>{
+  if(!event.target.closest('#nav-popover')&&!event.target.closest('[data-nav-group]')) closeNavigationPopover();
+
+  const target = event.target.closest('[data-route],[data-render-route],[data-sale-detail],[data-user-edit],[data-team-edit],[data-plan-edit],[data-catalog-edit],[data-role-edit],[data-role-save]');
+  if (!target || target.disabled) return;
+
+  if (target.dataset.route) {
+    event.preventDefault();
+    navigate(target.dataset.route, target.dataset.routeQuery || '');
+  } else if (target.hasAttribute('data-render-route')) {
+    event.preventDefault();
+    renderRoute();
+  } else if (target.dataset.saleDetail) {
+    event.preventDefault();
+    openSaleDetail(Number(target.dataset.saleDetail));
+  } else if (target.dataset.userEdit) {
+    event.preventDefault();
+    openUserForm(Number(target.dataset.userEdit));
+  } else if (target.dataset.teamEdit) {
+    event.preventDefault();
+    openTeamForm(Number(target.dataset.teamEdit));
+  } else if (target.dataset.planEdit) {
+    event.preventDefault();
+    openPlanForm(Number(target.dataset.planEdit));
+  } else if (target.dataset.catalogEdit) {
+    event.preventDefault();
+    openCatalogForm(Number(target.dataset.catalogEdit), target.dataset.catalogCategory || '');
+  } else if (target.dataset.roleEdit) {
+    event.preventDefault();
+    openRoleForm(target.dataset.roleEdit);
+  } else if (target.dataset.roleSave) {
+    event.preventDefault();
+    saveRole(target.dataset.roleSave);
+  }
+});
 window.addEventListener('resize',closeNavigationPopover);
 window.addEventListener('scroll',closeNavigationPopover,true);
 
@@ -653,7 +704,7 @@ async function renderDashboard() {
     const operationLabel = data.preset?.operation_group_label || 'Operação';
     $('#content').innerHTML = `
       <section class="dashboard-hero"><div><p class="eyebrow">${esc(String(operationLabel).toUpperCase())}</p><h1>Olá, ${esc(visibleName)}</h1><p>Resumo do perfil ${esc(activeProfile().name||'')} sem indicadores de outros segmentos.</p></div></section>
-      <section class="dashboard-metrics">${cards.length ? cards.map(card=>`<article class="stat-card compact" style="--accent:var(--cyan)"><div class="stat-top"><span>${esc(card.label)}</span><span class="stat-icon">◇</span></div><div class="stat-value">${card.total}</div><div class="stat-note">${card.overdue?`${card.overdue} prazo(s) vencido(s)`:card.amount?money(card.amount):'Registros ativos'}</div><button class="metric-link" onclick="navigate('${card.module}')">Abrir módulo</button></article>`).join('') : '<article class="stat-card compact"><div class="stat-note">Este perfil ainda não possui registros operacionais.</div></article>'}</section>
+      <section class="dashboard-metrics">${cards.length ? cards.map(card=>`<article class="stat-card compact" style="--accent:var(--cyan)"><div class="stat-top"><span>${esc(card.label)}</span><span class="stat-icon">◇</span></div><div class="stat-value">${card.total}</div><div class="stat-note">${card.overdue?`${card.overdue} prazo(s) vencido(s)`:card.amount?money(card.amount):'Registros ativos'}</div><button type="button" class="metric-link" data-route="${esc(card.module)}">Abrir módulo</button></article>`).join('') : '<article class="stat-card compact"><div class="stat-note">Este perfil ainda não possui registros operacionais.</div></article>'}</section>
       <section class="panel"><header class="panel-head"><div><h3>Atualizações recentes</h3><small class="muted">Movimentações dos módulos deste preset</small></div></header>${genericRecordTable(recent,{compact:true})}</section>`;
     return;
   }
@@ -673,8 +724,8 @@ async function renderDashboard() {
       <div class="dashboard-hero-actions">${has('sales.create')?'<button class="btn primary" id="dashboard-new-sale">＋ Nova venda</button>':''}<button class="btn" id="dashboard-view-sales">Ver vendas</button></div>
     </section>
     <section class="dashboard-metrics" aria-label="Indicadores principais">${cards.map(([title,value,note,icon,color])=>`<article class="stat-card compact" style="--accent:var(${color})"><div class="stat-top"><span>${title}</span><span class="stat-icon">${icon}</span></div><div class="stat-value">${value}</div><div class="stat-note">${note}</div></article>`).join('')}</section>
-    <section class="panel dashboard-recent"><header class="panel-head"><div><h3>Vendas recentes</h3><small class="muted">Últimas movimentações do perfil atual</small></div><button class="btn small" onclick="navigate('sales')">Ver todas</button></header>${salesTable(data.recent)}</section>
-    ${data.teams?.length ? `<section class="panel"><header class="panel-head"><div><h3>Desempenho das equipes</h3><small class="muted">Comparação rápida do dia</small></div><button class="btn small ghost" onclick="navigate('daily')">Análise completa</button></header><div class="panel-body dashboard-teams">${data.teams.map(t=>`<article class="team-card"><h4>${esc(t.team_name)}</h4><div class="metric-row"><span>Hoje</span><strong>${t.today}</strong></div><div class="metric-row"><span>Total</span><strong>${t.total}</strong></div><div class="metric-row"><span>Instaladas</span><strong>${t.installed}</strong></div></article>`).join('')}</div></section>`:''}`;
+    <section class="panel dashboard-recent"><header class="panel-head"><div><h3>Vendas recentes</h3><small class="muted">Últimas movimentações do perfil atual</small></div><button type="button" class="btn small" data-route="sales">Ver todas</button></header>${salesTable(data.recent)}</section>
+    ${data.teams?.length ? `<section class="panel"><header class="panel-head"><div><h3>Desempenho das equipes</h3><small class="muted">Comparação rápida do dia</small></div><button type="button" class="btn small ghost" data-route="daily">Análise completa</button></header><div class="panel-body dashboard-teams">${data.teams.map(t=>`<article class="team-card"><h4>${esc(t.team_name)}</h4><div class="metric-row"><span>Hoje</span><strong>${t.today}</strong></div><div class="metric-row"><span>Total</span><strong>${t.total}</strong></div><div class="metric-row"><span>Instaladas</span><strong>${t.installed}</strong></div></article>`).join('')}</div></section>`:''}`;
   $('#dashboard-new-sale')?.addEventListener('click',()=>openSaleForm(null,true));
   $('#dashboard-view-sales')?.addEventListener('click',()=>navigate('sales'));
   bindSaleRows();
@@ -1017,7 +1068,6 @@ function openWorkflowForm(sale) {
     <label>Motivo do cancelamento<select name="cancelled_reason">${catalogOptions('cancellation_reason',sale.cancelled_reason)}</select></label>
     <div class="full page-actions" style="justify-content:flex-end"><button type="button" class="btn ghost" data-close-modal>Cancelar</button><button class="btn primary">Salvar tratamento</button></div>
   </form>`,{wide:true});
-  $$('[data-close-modal]').forEach(el=>el.addEventListener('click',closeModal));
   $('#workflow-form').addEventListener('submit',async e=>{
     e.preventDefault();
     try{
@@ -1065,7 +1115,7 @@ async function renderRanking(params=new URLSearchParams()) {
   const data=await api('/api/ranking?'+qs({period}));
   $('#content').innerHTML=`
     <div class="page-head"><div><h1>Ranking ${period==='month'?'do mês':'geral'}</h1><p class="muted">Pontuação: instaladas × 100 + vendas × 10 − canceladas × 5.</p></div>
-      <div class="filters"><button class="btn ${period==='month'?'primary':''}" onclick="navigate('ranking','period=month')">Mês</button><button class="btn ${period==='all'?'primary':''}" onclick="navigate('ranking','period=all')">Geral</button></div></div>
+      <div class="filters"><button type="button" class="btn ${period==='month'?'primary':''}" data-route="ranking" data-route-query="period=month">Mês</button><button type="button" class="btn ${period==='all'?'primary':''}" data-route="ranking" data-route-query="period=all">Geral</button></div></div>
     <section class="panel"><div class="table-wrap"><table class="data-table"><thead><tr><th>Posição</th><th>Vendedor</th><th>Equipe</th><th>Vendas</th><th>Instaladas</th><th>Canceladas</th><th>Conversão</th><th>Pontos</th></tr></thead><tbody>${data.ranking.map(r=>`<tr><td><span class="badge ${r.position<=3?'amber':'cyan'}">#${r.position}</span></td><td class="cell-main">${esc(r.name)}</td><td>${esc(r.team_name)}</td><td>${r.total}</td><td>${r.installed}</td><td>${r.cancelled}</td><td>${r.conversion}%</td><td class="cell-main">${r.points}</td></tr>`).join('')}</tbody></table></div>${!data.ranking.length?'<div class="empty">Nenhum vendedor encontrado.</div>':''}</section>`;
 }
 
@@ -1133,7 +1183,7 @@ async function renderIntelligence() {
     ? badge('Modo local ativo','cyan')
     : badge(`${activeLabel} conectado`,'ok');
   $('#content').innerHTML=`
-    <div class="page-head"><div><h1>ONE Intelligence</h1><p class="muted">Assistente operacional com GroqCloud, OpenAI opcional e fallback local automático.</p></div><button class="btn" onclick="renderRoute()">Atualizar</button></div>
+    <div class="page-head"><div><h1>ONE Intelligence</h1><p class="muted">Assistente operacional com GroqCloud, OpenAI opcional e fallback local automático.</p></div><button type="button" class="btn" data-render-route>Atualizar</button></div>
     <section class="panel ai-panel">
       <header class="panel-head"><div><h3>Assistente operacional</h3><small class="muted">${esc(activeLabel)} · ${esc(ai.model||'motor-local')}</small></div>${providerStatus}</header>
       <div class="panel-body">
@@ -1158,7 +1208,7 @@ async function renderIntelligence() {
       <div class="team-card"><h4>OpenAI</h4><p>${providers.openai?.configured?'Chave detectada no Railway.':'Opcional; pode permanecer sem saldo.'}</p>${providers.openai?.configured?badge(`Pronto · ${providers.openai.model}`,'ok'):badge('Opcional','aguard')}</div>
       <div class="team-card"><h4>Análise local</h4><p>Indicadores e regras do próprio CRM, sem consumo externo.</p>${badge('Sempre disponível','cyan')}</div>
     </div></section>
-    <section class="panel"><header class="panel-head"><div><h3>Alertas operacionais locais</h3><small class="muted">Gerados sem consumo de API.</small></div><span class="badge cyan">${local.insights.length}</span></header><div class="panel-body">${local.insights.length?local.insights.map(i=>`<article class="insight ${i.severity}"><h4>${esc(i.title)}</h4><p>${esc(i.description)}</p>${i.sale_id?`<button class="btn small ghost" style="margin-top:10px" onclick="openSaleDetail(${i.sale_id})">Abrir venda</button>`:''}</article>`).join(''):'<div class="empty">Nenhum alerta relevante.</div>'}</div></section>`;
+    <section class="panel"><header class="panel-head"><div><h3>Alertas operacionais locais</h3><small class="muted">Gerados sem consumo de API.</small></div><span class="badge cyan">${local.insights.length}</span></header><div class="panel-body">${local.insights.length?local.insights.map(i=>`<article class="insight ${i.severity}"><h4>${esc(i.title)}</h4><p>${esc(i.description)}</p>${i.sale_id?`<button type="button" class="btn small ghost" style="margin-top:10px" data-sale-detail="${i.sale_id}">Abrir venda</button>`:''}</article>`).join(''):'<div class="empty">Nenhum alerta relevante.</div>'}</div></section>`;
   renderAIMessages();
   $('#ai-form')?.addEventListener('submit',e=>{e.preventDefault();sendAIQuestion();});
   $$('[data-ai-quick]').forEach(button=>button.addEventListener('click',()=>sendAIQuestion(quickPrompts[Number(button.dataset.aiQuick)])));
@@ -1242,7 +1292,6 @@ function openPlatformRoleForm(code=null){
     <div class="full permission-grid" data-platform-role-permissions>${platformPermissionsMarkup(role||{permissions:[]},modules)}</div>
     <div class="full page-actions" style="justify-content:flex-end"><button type="button" class="btn ghost" data-close-modal>Cancelar</button><button class="btn primary">${role?'Salvar cargo':'Criar cargo'}</button></div>
   </form>`,{wide:true});
-  $$('[data-close-modal]').forEach(el=>el.addEventListener('click',closeModal));
   const form=$('#platform-role-form');
   if(!role){
     const nameInput=form.elements.name,codeInput=form.elements.code;
@@ -1276,7 +1325,6 @@ function openPlatformUserForm(id=null){
     <fieldset class="full permission-group" id="platform-profile-assignment"><legend>Perfis atribuídos</legend><p class="muted">Administradores e funcionários enxergam somente os perfis selecionados. Donos possuem acesso automático a todos.</p><div class="platform-profile-options">${(data.profiles||[]).map(profile=>`<label class="module-toggle-item"><span class="module-toggle-info"><strong>${esc(profile.name)}</strong><small>${esc(profile.business_type)}${profile.active?'':' · inativo'}</small></span><span class="module-toggle-control"><input type="checkbox" name="profile_ids" value="${profile.id}" ${assigned.has(String(profile.id))?'checked':''} ${profile.active?'':'disabled'}></span></label>`).join('')}</div></fieldset>
     <div class="full page-actions" style="justify-content:flex-end"><button type="button" class="btn ghost" data-close-modal>Cancelar</button><button class="btn primary">Salvar funcionário</button></div>
   </form>`,{wide:true});
-  $$('[data-close-modal]').forEach(el=>el.addEventListener('click',closeModal));
   const form=$('#platform-user-form');
   const updateAssignmentVisibility=()=>{
     const role=(data.roles||[]).find(item=>item.code===form.elements.platform_role_code.value);
@@ -1350,7 +1398,6 @@ function openProfileForm(id=null) {
     <fieldset class="full permission-group"><legend>Módulos habilitados</legend><div class="permission-grid" id="profile-module-grid">${profileModuleOptions(profile?.modules||template.modules,template)}</div></fieldset>
     <div class="full page-actions" style="justify-content:flex-end"><button type="button" class="btn ghost" data-close-modal>Cancelar</button><button class="btn primary">Salvar perfil</button></div>
   </form>`,{wide:true});
-  $$('[data-close-modal]').forEach(el=>el.addEventListener('click',closeModal));
   const typeSelect=$('#profile-form [name="business_type"]');
   typeSelect?.addEventListener('change',()=>{
     const t=state.profileTemplates.find(item=>item.code===typeSelect.value);
@@ -1515,7 +1562,6 @@ async function openProfileRecordForm(module,id=null,records=[]) {
     ${id?`<label class="switch-row full">Registro ativo<input type="checkbox" name="active" ${item.active?'checked':''}></label>`:''}
     <div class="full page-actions" style="justify-content:flex-end"><button type="button" class="btn ghost" data-close-modal>Cancelar</button><button class="btn primary">Salvar</button></div>
   </form>`,{wide:true});
-  $$('[data-close-modal]').forEach(el=>el.addEventListener('click',closeModal));
   $('#profile-record-form').addEventListener('submit',async event=>{
     event.preventDefault();const payload=formObject(event.currentTarget);payload.module=module;payload.data={};
     $$('[data-record-field]',event.currentTarget).forEach(input=>payload.data[input.dataset.recordField]=input.value);
@@ -1556,7 +1602,6 @@ function openCashForm(id=null) {
     <label class="full">Observações<textarea name="notes">${esc(item?.notes||'')}</textarea></label>
     <div class="full page-actions" style="justify-content:flex-end"><button type="button" class="btn ghost" data-close-modal>Cancelar</button><button class="btn primary">Salvar</button></div>
   </form>`);
-  $$('[data-close-modal]').forEach(el=>el.addEventListener('click',closeModal));
   $('#cash-form').addEventListener('submit',async event=>{event.preventDefault();try{await api(id?`/api/cash/${id}`:'/api/cash',{method:id?'PUT':'POST',body:formObject(event.currentTarget)});closeModal();toast('Lançamento salvo.');renderCash();}catch(error){toast(error.message,'error');}});
 }
 
@@ -1584,7 +1629,7 @@ async function renderUsers() {
   state.users=u.users;state.teams=t.teams;state.roles=r.roles||[];
   $('#content').innerHTML=`
     <div class="page-head"><div><h1>Funcionários</h1><p class="muted">Cargos controlam o acesso no servidor, não apenas os botões.</p></div>${has('users.manage')?'<button class="btn primary" id="new-user">＋ Novo usuário</button>':''}</div>
-    <section class="panel"><div class="table-wrap"><table class="data-table"><thead><tr><th>Usuário</th><th>Cargo</th><th>Equipe</th><th>Status</th><th>Último acesso</th><th></th></tr></thead><tbody>${state.users.map(u=>`<tr><td><div class="cell-main">${esc(u.name)}</div><div class="cell-sub">${esc(u.email)}</div></td><td>${badge(u.role_name||roleLabel(u.role_code),u.base_role||u.role_code)}${u.is_contractor?' <span class="badge violet">Contratante</span>':''}${u.platform_role_code?' <span class="badge cyan">Equipe da Plataforma</span>':''}</td><td>${esc(u.team_name||'-')}</td><td>${u.active?badge('Ativo','ok'):badge('Bloqueado','cancelada')}</td><td>${fmtDateTime(u.last_login_at)}</td><td>${has('users.manage')?`<button class="btn small" onclick="openUserForm(${u.id})">Editar</button>`:''}</td></tr>`).join('')}</tbody></table></div></section>`;
+    <section class="panel"><div class="table-wrap"><table class="data-table"><thead><tr><th>Usuário</th><th>Cargo</th><th>Equipe</th><th>Status</th><th>Último acesso</th><th></th></tr></thead><tbody>${state.users.map(u=>`<tr><td><div class="cell-main">${esc(u.name)}</div><div class="cell-sub">${esc(u.email)}</div></td><td>${badge(u.role_name||roleLabel(u.role_code),u.base_role||u.role_code)}${u.is_contractor?' <span class="badge violet">Contratante</span>':''}${u.platform_role_code?' <span class="badge cyan">Equipe da Plataforma</span>':''}</td><td>${esc(u.team_name||'-')}</td><td>${u.active?badge('Ativo','ok'):badge('Bloqueado','cancelada')}</td><td>${fmtDateTime(u.last_login_at)}</td><td>${has('users.manage')?`<button type="button" class="btn small" data-user-edit="${u.id}">Editar</button>`:''}</td></tr>`).join('')}</tbody></table></div></section>`;
   $('#new-user')?.addEventListener('click',()=>openUserForm());
 }
 
@@ -1606,7 +1651,6 @@ function openUserForm(id=null) {
     ${isPlatformOwner()?`<label class="switch-row full">Responsável Contratante deste perfil<input type="checkbox" name="is_contractor" ${user?.is_contractor?'checked':''}></label>`:''}
     <div class="full page-actions" style="justify-content:flex-end"><button type="button" class="btn ghost" data-close-modal>Cancelar</button><button class="btn primary">Salvar</button></div>
   </form>`);
-  $$('[data-close-modal]').forEach(el=>el.addEventListener('click',closeModal));
   $('#user-form').addEventListener('submit',async e=>{e.preventDefault();try{const payload=formObject(e.currentTarget);if(id&&!payload.password)delete payload.password;await api(id?`/api/users/${id}`:'/api/users',{method:id?'PUT':'POST',body:payload});closeModal();state.users=[];toast('Usuário salvo.');renderUsers();}catch(error){toast(error.message,'error');}});
 }
 
@@ -1616,7 +1660,7 @@ async function renderTeams() {
   state.teams=t.teams;if(u.users?.length)state.users=u.users;
   $('#content').innerHTML=`
     <div class="page-head"><div><h1>Equipes</h1><p class="muted">Metas e responsáveis configurados sem editar arquivos.</p></div>${has('teams.manage')?'<button class="btn primary" id="new-team">＋ Nova equipe</button>':''}</div>
-    <div class="grid-3">${state.teams.map(t=>`<article class="team-card"><div style="display:flex;justify-content:space-between"><h4>${esc(t.name)}</h4>${t.active?badge('Ativa','ok'):badge('Inativa','cancelada')}</div><div class="metric-row"><span>Gerente</span><strong>${esc(t.manager_name||'-')}</strong></div><div class="metric-row"><span>Funcionários</span><strong>${t.members}</strong></div><div class="metric-row"><span>Meta mensal</span><strong>${t.monthly_target}</strong></div>${has('teams.manage')?`<button class="btn small" onclick="openTeamForm(${t.id})">Editar</button>`:''}</article>`).join('')}</div>`;
+    <div class="grid-3">${state.teams.map(t=>`<article class="team-card"><div style="display:flex;justify-content:space-between"><h4>${esc(t.name)}</h4>${t.active?badge('Ativa','ok'):badge('Inativa','cancelada')}</div><div class="metric-row"><span>Gerente</span><strong>${esc(t.manager_name||'-')}</strong></div><div class="metric-row"><span>Funcionários</span><strong>${t.members}</strong></div><div class="metric-row"><span>Meta mensal</span><strong>${t.monthly_target}</strong></div>${has('teams.manage')?`<button type="button" class="btn small" data-team-edit="${t.id}">Editar</button>`:''}</article>`).join('')}</div>`;
   $('#new-team')?.addEventListener('click',()=>openTeamForm());
 }
 
@@ -1630,7 +1674,6 @@ function openTeamForm(id=null) {
     ${id?`<label class="switch-row">Equipe ativa<input type="checkbox" name="active" ${team.active?'checked':''}></label>`:''}
     <div class="full page-actions" style="justify-content:flex-end"><button type="button" class="btn ghost" data-close-modal>Cancelar</button><button class="btn primary">Salvar</button></div>
   </form>`);
-  $$('[data-close-modal]').forEach(el=>el.addEventListener('click',closeModal));
   $('#team-form').addEventListener('submit',async e=>{e.preventDefault();try{await api(id?`/api/teams/${id}`:'/api/teams',{method:id?'PUT':'POST',body:formObject(e.currentTarget)});closeModal();state.teams=[];toast('Equipe salva.');renderTeams();}catch(error){toast(error.message,'error');}});
 }
 
@@ -1645,7 +1688,7 @@ async function renderPlans() {
   const canManage=has('plans.manage');
   $('#content').innerHTML=`
     <div class="page-head"><div><h1>${esc(ui.plans_title)}</h1><p class="muted">${canManage?`Cadastros recomendados para o preset ${esc(activePreset().name||'atual')}.`:`Visualização dos itens cadastrados no perfil atual.`}</p></div>${canManage?`<button class="btn primary" id="new-plan">＋ Novo ${esc(ui.plans_singular)}</button>`:badge('Somente leitura','cyan')}</div>
-    <section class="panel"><div class="table-wrap"><table class="data-table"><thead><tr><th>${esc(String(ui.plans_singular).replace(/^./,c=>c.toUpperCase()))}</th><th>${esc(ui.provider)}</th><th>${esc(ui.service)}</th><th>${esc(ui.attribute)}</th><th>Preço</th><th>${esc(ui.coverage)}</th><th>Status</th>${canManage?'<th></th>':''}</tr></thead><tbody>${state.plans.map(p=>`<tr><td><div class="cell-main">${esc(p.name)}</div><div class="cell-sub">${esc(p.benefits||'')}</div></td><td>${esc(p.provider)}</td><td>${esc(p.service)}</td><td>${esc(p.speed||'-')}</td><td>${money(p.price)}</td><td>${esc(p.uf_list||'Todas')}</td><td>${p.active?badge('Ativo','ok'):badge('Inativo','cancelada')}</td>${canManage?`<td><button class="btn small" onclick="openPlanForm(${p.id})">Editar</button></td>`:''}</tr>`).join('')}</tbody></table></div></section>`;
+    <section class="panel"><div class="table-wrap"><table class="data-table"><thead><tr><th>${esc(String(ui.plans_singular).replace(/^./,c=>c.toUpperCase()))}</th><th>${esc(ui.provider)}</th><th>${esc(ui.service)}</th><th>${esc(ui.attribute)}</th><th>Preço</th><th>${esc(ui.coverage)}</th><th>Status</th>${canManage?'<th></th>':''}</tr></thead><tbody>${state.plans.map(p=>`<tr><td><div class="cell-main">${esc(p.name)}</div><div class="cell-sub">${esc(p.benefits||'')}</div></td><td>${esc(p.provider)}</td><td>${esc(p.service)}</td><td>${esc(p.speed||'-')}</td><td>${money(p.price)}</td><td>${esc(p.uf_list||'Todas')}</td><td>${p.active?badge('Ativo','ok'):badge('Inativo','cancelada')}</td>${canManage?`<td><button type="button" class="btn small" data-plan-edit="${p.id}">Editar</button></td>`:''}</tr>`).join('')}</tbody></table></div></section>`;
   $('#new-plan')?.addEventListener('click',()=>openPlanForm());
 }
 function openPlanForm(id=null) {
@@ -1662,7 +1705,6 @@ function openPlanForm(id=null) {
     <label class="switch-row full">Item ativo<input type="checkbox" name="active" ${p?.active!==0?'checked':''}></label>
     <div class="full page-actions" style="justify-content:flex-end"><button type="button" class="btn ghost" data-close-modal>Cancelar</button><button class="btn primary">Salvar</button></div>
   </form>`);
-  $$('[data-close-modal]').forEach(el=>el.addEventListener('click',closeModal));
   $('#plan-form').addEventListener('submit',async e=>{e.preventDefault();try{await api(id?`/api/plans/${id}`:'/api/plans',{method:id?'PUT':'POST',body:formObject(e.currentTarget)});closeModal();state.plans=[];toast('Cadastro salvo.');renderPlans();}catch(error){toast(error.message,'error');}});
 }
 
@@ -1682,7 +1724,7 @@ async function renderCatalogs() {
   const canManage=has('catalogs.manage');
   $('#content').innerHTML=`
     <div class="page-head"><div><h1>Opções configuráveis</h1><p class="muted">${canManage?'Itens usados em vendas antigas são desativados, não apagados.':'Visualização dos catálogos e status do perfil atual.'}</p></div>${canManage?'<button class="btn primary" id="new-catalog">＋ Novo item</button>':badge('Somente leitura','cyan')}</div>
-    <div class="grid-2">${categories.map(cat=>`<section class="panel"><header class="panel-head"><h3>${esc(categoryLabels[cat]||cat)}</h3><span class="badge cyan">${(state.catalogs[cat]||[]).length}</span></header><div class="panel-body">${(state.catalogs[cat]||[]).map(i=>`<div class="team-card" style="margin-bottom:8px;display:flex;align-items:center;justify-content:space-between;gap:10px"><div><strong>${esc(i.label)}</strong><div class="code">${esc(i.code)}</div></div><div class="actions">${i.active?badge('Ativo','ok'):badge('Inativo','cancelada')}${canManage?`<button class="btn small" onclick="openCatalogForm(${i.id},'${esc(cat)}')">Editar</button>`:''}</div></div>`).join('')||'<div class="empty">Sem itens.</div>'}</div></section>`).join('')}</div>`;
+    <div class="grid-2">${categories.map(cat=>`<section class="panel"><header class="panel-head"><h3>${esc(categoryLabels[cat]||cat)}</h3><span class="badge cyan">${(state.catalogs[cat]||[]).length}</span></header><div class="panel-body">${(state.catalogs[cat]||[]).map(i=>`<div class="team-card" style="margin-bottom:8px;display:flex;align-items:center;justify-content:space-between;gap:10px"><div><strong>${esc(i.label)}</strong><div class="code">${esc(i.code)}</div></div><div class="actions">${i.active?badge('Ativo','ok'):badge('Inativo','cancelada')}${canManage?`<button type="button" class="btn small" data-catalog-edit="${i.id}" data-catalog-category="${esc(cat)}">Editar</button>`:''}</div></div>`).join('')||'<div class="empty">Sem itens.</div>'}</div></section>`).join('')}</div>`;
   $('#new-catalog')?.addEventListener('click',()=>openCatalogForm());
 }
 function openCatalogForm(id=null,category='') {
@@ -1696,7 +1738,6 @@ function openCatalogForm(id=null,category='') {
     ${id?`<label class="switch-row full">Item ativo<input type="checkbox" name="active" ${item.active?'checked':''}></label>`:''}
     <div class="full page-actions" style="justify-content:flex-end"><button type="button" class="btn ghost" data-close-modal>Cancelar</button><button class="btn primary">Salvar</button></div>
   </form>`);
-  $$('[data-close-modal]').forEach(el=>el.addEventListener('click',closeModal));
   $('#catalog-form').addEventListener('submit',async e=>{e.preventDefault();try{const payload=formObject(e.currentTarget);if(id)delete payload.category;await api(id?`/api/catalogs/${id}`:'/api/catalogs',{method:id?'PUT':'POST',body:payload});closeModal();state.catalogs={};toast('Catálogo salvo.');renderCatalogs();}catch(error){toast(error.message,'error');}});
 }
 
@@ -1719,7 +1760,7 @@ async function renderRoles() {
   const canManage=has('roles.manage');
   $('#content').innerHTML=`
     <div class="page-head"><div><h1>Cargos e permissões</h1><p class="muted">${canManage?'Crie cargos próprios e escolha exatamente o que cada grupo pode acessar. O Dono continua com acesso total.':'Visualização dos cargos e permissões do perfil atual.'}</p></div>${canManage?'<button class="btn primary" id="new-role">＋ Novo cargo</button>':badge('Somente leitura','cyan')}</div>
-    <div class="grid-2">${editableRoles.map(role=>`<section class="panel"><header class="panel-head"><div><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><h3>${esc(role.name)}</h3>${role.is_system?badge('Nativo','cyan'):badge('Personalizado','green')}${role.active?badge('Ativo','ok'):badge('Inativo','cancelada')}</div><p class="muted" style="margin-top:6px">${esc(role.description||'Sem descrição')} · Base: ${esc(baseRoleTypeLabels[role.base_role]||role.base_role)} · ${role.users_count||0} usuário(s)</p></div>${canManage?`<div class="actions">${!role.is_system?`<button class="btn small" onclick="openRoleForm('${esc(role.code)}')">Editar</button>`:''}<button class="btn small primary" onclick="saveRole('${esc(role.code)}')">Salvar permissões</button></div>`:''}</header><div class="panel-body permission-grid" data-role-box="${esc(role.code)}">${rolePermissionsMarkup(role,modules,'role',!canManage)}</div></section>`).join('')}</div>`;
+    <div class="grid-2">${editableRoles.map(role=>`<section class="panel"><header class="panel-head"><div><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><h3>${esc(role.name)}</h3>${role.is_system?badge('Nativo','cyan'):badge('Personalizado','green')}${role.active?badge('Ativo','ok'):badge('Inativo','cancelada')}</div><p class="muted" style="margin-top:6px">${esc(role.description||'Sem descrição')} · Base: ${esc(baseRoleTypeLabels[role.base_role]||role.base_role)} · ${role.users_count||0} usuário(s)</p></div>${canManage?`<div class="actions">${!role.is_system?`<button type="button" class="btn small" data-role-edit="${esc(role.code)}">Editar</button>`:''}<button type="button" class="btn small primary" data-role-save="${esc(role.code)}">Salvar permissões</button></div>`:''}</header><div class="panel-body permission-grid" data-role-box="${esc(role.code)}">${rolePermissionsMarkup(role,modules,'role',!canManage)}</div></section>`).join('')}</div>`;
   $('#new-role')?.addEventListener('click',()=>openRoleForm());
 }
 
@@ -1751,7 +1792,6 @@ function openRoleForm(code=null){
     <div class="full permission-grid" data-role-form-permissions>${rolePermissionsMarkup(formRole,modules,'form')}</div>
     <div class="full page-actions" style="justify-content:flex-end"><button type="button" class="btn ghost" data-close-modal>Cancelar</button><button class="btn primary">${role?'Salvar cargo':'Criar cargo'}</button></div>
   </form>`,{wide:true});
-  $$('[data-close-modal]').forEach(el=>el.addEventListener('click',closeModal));
   const form=$('#role-form');
   const nameInput=form.elements.name;
   const codeInput=form.elements.code;
