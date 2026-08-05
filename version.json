@@ -1,6 +1,6 @@
 {
   "name": "ONE CRM",
-  "version": "2.5.0-beta.1",
+  "version": "2.5.1-beta.1",
   "channel": "beta-online",
-  "description": "Pacote de produção para Railway com Volume obrigatório, inicialização protegida, container sem privilégios, CSP, validação de origem, CI e healthcheck ampliado."
+  "description": "Hotfix do build Railway: remove dependência do arquivo data/.keep no Dockerfile e cria /app/data diretamente na imagem."
 }

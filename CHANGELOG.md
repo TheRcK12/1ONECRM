@@ -1,3 +1,9 @@
+# 2.5.1-beta.1
+
+- Corrige falha de build no Railway causada por `COPY data/.keep /app/data/.keep`.
+- O diretório `/app/data` agora é criado diretamente no Dockerfile.
+- Mantém o Volume persistente esperado em `/app/data`.
+
 # ONE CRM 2.5.0-beta.1
 
 ## Railway Production

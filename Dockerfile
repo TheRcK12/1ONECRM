@@ -2,7 +2,7 @@ FROM python:3.11-slim-bookworm
 
 LABEL org.opencontainers.image.title="ONE CRM" \
       org.opencontainers.image.description="ONE CRM multi-perfil preparado para Railway" \
-      org.opencontainers.image.version="2.5.0-beta.1"
+      org.opencontainers.image.version="2.5.1-beta.1"
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -25,8 +25,9 @@ RUN python -m pip install --no-cache-dir -r /app/requirements.txt
 COPY --chown=10001:10001 one_crm_server.py one_crm_ai.py one_crm_profiles.py railway_entrypoint.py /app/
 COPY --chown=10001:10001 config.json version.json /app/
 COPY --chown=10001:10001 static /app/static
-COPY --chown=10001:10001 data/.keep /app/data/.keep
 
+# /app/data is created inside the image and may later be replaced by the Railway Volume.
+# Do not COPY a placeholder from the repository: Git/ZIP workflows can omit dotfiles.
 RUN mkdir -p /app/data/backups /app/data/logs \
     && chown -R 10001:10001 /app \
     && python -m compileall -q /app

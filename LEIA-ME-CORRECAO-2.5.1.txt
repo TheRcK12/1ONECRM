@@ -1,0 +1,15 @@
+ONE CRM 2.5.1-beta.1 — CORREÇÃO DO BUILD RAILWAY
+
+Problema corrigido:
+O Dockerfile tentava copiar data/.keep, mas esse arquivo não estava no commit/build context.
+
+Alteração:
+- removido COPY data/.keep /app/data/.keep;
+- /app/data, /app/data/backups e /app/data/logs são criados pela própria imagem;
+- o Volume do Railway continua devendo ser montado em /app/data.
+
+Publicação:
+1. Extraia este pacote na raiz do repositório.
+2. Substitua os arquivos.
+3. Commit to main e Push origin.
+4. Use o novo deploy gerado pelo commit. Não use Redeploy do commit antigo.

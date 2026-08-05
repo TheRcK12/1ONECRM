@@ -14,7 +14,6 @@ __pycache__
 server.pid
 logs
 data/*
-!data/.keep
 *.zip
 *.sha256.txt
 *.bat
