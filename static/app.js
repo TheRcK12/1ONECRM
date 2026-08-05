@@ -16,6 +16,7 @@ const state = {
   currentSale: null,
   aiMessages: [],
   profiles: [],
+  platformAccess: null,
   profileTemplates: [],
   cashTransactions: [],
 };
@@ -43,13 +44,14 @@ const fmtDateTime = value => {
 const initials = name => String(name || 'OC').split(/\s+/).slice(0,2).map(x=>x[0]).join('').toUpperCase();
 const has = permission => state.user?.is_platform_owner || baseRole(state.user) === 'owner' || state.user?.permissions?.includes(permission);
 const isPlatformOwner = () => Boolean(state.user?.is_platform_owner);
+const isPlatformStaff = () => Boolean(state.user?.is_platform_staff);
 const isReadOnlyContractor = () => Boolean(state.user?.is_contractor && !state.user?.is_platform_owner);
 const activeProfile = () => state.user?.profile || {};
 const activePreset = () => activeProfile().preset || {};
 const activeModules = () => new Set(activeProfile().modules || []);
 const routeModuleMap = {dashboard:'dashboard',sales:'sales','new-sale':'sales',bko:'bko',daily:'daily',powerbi:'powerbi',ranking:'ranking',intelligence:'intelligence',users:'users',teams:'teams',plans:'plans',catalogs:'catalogs',roles:'roles',audit:'audit',backups:'backups',integrations:'integrations',cash:'cash','profile-settings':'users'};
 const moduleEnabled = route => {
-  if (route === 'profiles') return isPlatformOwner();
+  if (route === 'profiles' || route === 'platform-access') return isPlatformOwner();
   if (route === 'plans') return activeModules().has('plans') || activeModules().has('services_catalog');
   return activeModules().has(routeModuleMap[route] || route);
 };
@@ -308,6 +310,7 @@ const administrativeNavigationItems = [
 
 const navigationItems = [
   {id:'profiles',label:'Perfis',icon:'▦',test:()=>isPlatformOwner()},
+  {id:'platform-access',label:'Acessos da Plataforma',icon:'♛',test:()=>isPlatformOwner()},
   {id:'dashboard',label:'Dashboard',icon:'⌂',permission:'dashboard.view'},
   {id:'sales-group',label:'Vendas',icon:'▤',children:salesNavigationItems},
   {id:'operation-group',label:'Operação',icon:'◆',children:genericOperationItems},
@@ -346,7 +349,7 @@ function navigationDescription(item) {
     users:'Usuários, cargos e acessos',teams:'Equipes, gestores e metas',plans:'Produtos e ofertas',
     catalogs:'Opções usadas nos formulários',roles:'Limites de cada cargo',audit:'Histórico de alterações',
     backups:'Proteção do banco de dados',integrations:'Power BI, webhook, WhatsApp e IA',
-    profiles:'Ambientes isolados da plataforma',cash:'Entradas, saídas e saldo',
+    profiles:'Ambientes isolados da plataforma','platform-access':'Donos, administradores e equipe interna',cash:'Entradas, saídas e saldo',
     'profile-settings':'Identidade e módulos do perfil atual'
   };
   return descriptions[item.id] || 'Abrir módulo';
@@ -439,6 +442,7 @@ async function renderRoute() {
   try {
     const handlers = {
       profiles: renderProfiles,
+      'platform-access': renderPlatformAccess,
       dashboard: renderDashboard,
       sales: () => renderSales(params),
       'new-sale': () => openSaleForm(null, true),
@@ -538,7 +542,7 @@ function refreshUserUi() {
   if (switcher) {
     const profile = activeProfile();
     switcher.classList.remove('hidden');
-    if (isPlatformOwner() && state.profiles.length > 1) {
+    if (state.profiles.length > 1) {
       switcher.innerHTML = `<label><span>Perfil</span><select id="profile-select">${state.profiles.map(item=>`<option value="${item.id}" ${String(item.id)===String(profile.id)?'selected':''}>${esc(item.name)}</option>`).join('')}</select></label>`;
       $('#profile-select').addEventListener('change', async event => {
         const select = event.currentTarget;
@@ -1197,6 +1201,101 @@ function profileTemplatePreview(template) {
 }
 function moduleLabel(module) { return templateModuleLabel(activePreset(),module); }
 
+function platformPermissionModules(data=state.platformAccess) {
+  const modules={};
+  (data?.permissions||[]).forEach(permission=>(modules[permission.module]??=[]).push(permission));
+  return modules;
+}
+
+function platformPermissionsMarkup(role, modules, readOnly=false) {
+  const selected=new Set(role?.permissions||[]);
+  return Object.entries(modules).map(([module,permissions])=>`<div class="permission-module"><h4>${esc(module)}</h4><div class="check-list">${permissions.map(permission=>`<label class="check-item"><input type="checkbox" value="${esc(permission.code)}" ${selected.has(permission.code)?'checked':''} ${readOnly?'disabled':''}><span>${esc(permission.description)}</span></label>`).join('')}</div></div>`).join('');
+}
+
+async function renderPlatformAccess() {
+  if(!isPlatformOwner()) return navigate('dashboard');
+  setPage('Acessos da Plataforma','SEGURANÇA GLOBAL');
+  const data=await api('/api/platform-access');
+  state.platformAccess=data;
+  $('#content').innerHTML=`
+    <div class="page-head"><div><h1>Equipe e acessos da plataforma</h1><p class="muted">Área exclusiva dos Donos. Crie outros Donos, administradores e funcionários internos sem misturá-los aos cargos de cada perfil.</p></div><div class="actions"><button class="btn" id="new-platform-role">＋ Novo cargo</button><button class="btn primary" id="new-platform-user">＋ Novo funcionário</button></div></div>
+    <section class="panel"><header class="panel-head"><div><h3>Funcionários da plataforma</h3><small class="muted">Contas globais criadas e administradas somente por Donos.</small></div></header><div class="table-wrap"><table class="data-table"><thead><tr><th>Funcionário</th><th>Cargo global</th><th>Perfis atribuídos</th><th>Status</th><th>Último acesso</th><th></th></tr></thead><tbody>${(data.users||[]).map(user=>`<tr><td><div class="cell-main">${esc(user.name)}</div><div class="cell-sub">${esc(user.email)}</div></td><td>${badge(user.platform_role_name||user.platform_role_code,user.is_owner?'violet':'cyan')}</td><td>${user.is_owner?'<span class="badge violet">Todos os perfis</span>':(user.profiles||[]).map(profile=>`<span class="badge cyan">${esc(profile.name)}</span>`).join(' ')||'<span class="muted">Nenhum</span>'}</td><td>${user.active?badge('Ativo','ok'):badge('Bloqueado','cancelada')}</td><td>${fmtDateTime(user.last_login_at)}</td><td><button class="btn small" data-platform-user-edit="${user.id}">Editar</button></td></tr>`).join('')}</tbody></table></div></section>
+    <div class="page-head compact-head"><div><h2>Cargos da plataforma</h2><p class="muted">Esses cargos atuam somente nos perfis atribuídos. O cargo Dono continua sendo o único com acesso global irrestrito.</p></div></div>
+    <div class="grid-2">${(data.roles||[]).map(role=>`<section class="panel"><header class="panel-head"><div><div class="role-title-row"><h3>${esc(role.name)}</h3>${role.is_owner?badge('Protegido','violet'):role.is_system?badge('Nativo','cyan'):badge('Personalizado','green')}${role.active?badge('Ativo','ok'):badge('Inativo','cancelada')}</div><p class="muted">${esc(role.description||'Sem descrição')}</p></div>${role.is_owner?'':`<button class="btn small" data-platform-role-edit="${esc(role.code)}">Editar</button>`}</header><div class="panel-body permission-grid">${role.is_owner?'<div class="read-only-value">Acesso total a todos os perfis, configurações e à equipe da plataforma.</div>':platformPermissionsMarkup(role,platformPermissionModules(data),true)}</div></section>`).join('')}</div>`;
+  $('#new-platform-role')?.addEventListener('click',()=>openPlatformRoleForm());
+  $('#new-platform-user')?.addEventListener('click',()=>openPlatformUserForm());
+  $$('[data-platform-role-edit]').forEach(button=>button.addEventListener('click',()=>openPlatformRoleForm(button.dataset.platformRoleEdit)));
+  $$('[data-platform-user-edit]').forEach(button=>button.addEventListener('click',()=>openPlatformUserForm(Number(button.dataset.platformUserEdit))));
+}
+
+function openPlatformRoleForm(code=null){
+  const data=state.platformAccess;
+  const role=code?(data.roles||[]).find(item=>item.code===code):null;
+  if(role?.is_owner){toast('O cargo Dono da Plataforma é protegido.','error');return;}
+  const modules=platformPermissionModules(data);
+  modal(role?'Editar cargo da plataforma':'Novo cargo da plataforma',`<form id="platform-role-form" class="form-grid">
+    <label>Nome do cargo<input name="name" required minlength="2" value="${esc(role?.name||'')}" placeholder="Ex.: Administrador"></label>
+    <label>Código interno<input name="code" required pattern="[a-z0-9_]+" value="${esc(role?.code||'')}" ${role?'readonly':''} placeholder="administrador"></label>
+    ${role?`<label class="switch-row full">Cargo ativo<input type="checkbox" name="active" ${role.active?'checked':''}></label>`:''}
+    <label class="full">Descrição<textarea name="description">${esc(role?.description||'')}</textarea></label>
+    <div class="form-section full">Permissões nos perfis atribuídos</div>
+    <div class="full permission-grid" data-platform-role-permissions>${platformPermissionsMarkup(role||{permissions:[]},modules)}</div>
+    <div class="full page-actions" style="justify-content:flex-end"><button type="button" class="btn ghost" data-close-modal>Cancelar</button><button class="btn primary">${role?'Salvar cargo':'Criar cargo'}</button></div>
+  </form>`,{wide:true});
+  $$('[data-close-modal]').forEach(el=>el.addEventListener('click',closeModal));
+  const form=$('#platform-role-form');
+  if(!role){
+    const nameInput=form.elements.name,codeInput=form.elements.code;
+    nameInput.addEventListener('input',()=>{if(!codeInput.dataset.manual)codeInput.value=slugRoleCode(nameInput.value);});
+    codeInput.addEventListener('input',()=>{codeInput.dataset.manual='1';codeInput.value=slugRoleCode(codeInput.value);});
+  }
+  form.addEventListener('submit',async event=>{
+    event.preventDefault();
+    const payload=formObject(form);
+    payload.code=slugRoleCode(payload.code);
+    payload.permissions=$$('[data-platform-role-permissions] input:checked').map(input=>input.value);
+    try{
+      await api(role?`/api/platform-roles/${encodeURIComponent(role.code)}`:'/api/platform-roles',{method:role?'PUT':'POST',body:payload});
+      closeModal();toast(role?'Cargo atualizado.':'Cargo criado.');await renderPlatformAccess();
+    }catch(error){toast(error.message,'error');}
+  });
+}
+
+function openPlatformUserForm(id=null){
+  const data=state.platformAccess;
+  const user=id?(data.users||[]).find(item=>item.id===id):null;
+  const activeRoles=(data.roles||[]).filter(role=>role.active||role.code===user?.platform_role_code);
+  const assigned=new Set((user?.profiles||[]).map(profile=>String(profile.id)));
+  modal(user?'Editar funcionário da plataforma':'Novo funcionário da plataforma',`<form id="platform-user-form" class="form-grid">
+    <label>Nome<input name="name" required minlength="3" value="${esc(user?.name||'')}"></label>
+    <label>E-mail<input type="email" name="email" required value="${esc(user?.email||'')}"></label>
+    <label>Cargo da plataforma<select name="platform_role_code" required>${activeRoles.map(role=>`<option value="${esc(role.code)}" ${role.code===user?.platform_role_code?'selected':''}>${esc(role.name)}</option>`).join('')}</select></label>
+    <label>${user?'Nova senha (opcional)':'Senha inicial'}<input type="password" name="password" ${user?'':'required'} minlength="8"></label>
+    <label class="switch-row">Exigir troca de senha<input type="checkbox" name="must_change_password" ${user?(user.must_change_password?'checked':''):'checked'}></label>
+    ${user?`<label class="switch-row">Funcionário ativo<input type="checkbox" name="active" ${user.active?'checked':''}></label>`:''}
+    <fieldset class="full permission-group" id="platform-profile-assignment"><legend>Perfis atribuídos</legend><p class="muted">Administradores e funcionários enxergam somente os perfis selecionados. Donos possuem acesso automático a todos.</p><div class="platform-profile-options">${(data.profiles||[]).map(profile=>`<label class="module-toggle-item"><span class="module-toggle-info"><strong>${esc(profile.name)}</strong><small>${esc(profile.business_type)}${profile.active?'':' · inativo'}</small></span><span class="module-toggle-control"><input type="checkbox" name="profile_ids" value="${profile.id}" ${assigned.has(String(profile.id))?'checked':''} ${profile.active?'':'disabled'}></span></label>`).join('')}</div></fieldset>
+    <div class="full page-actions" style="justify-content:flex-end"><button type="button" class="btn ghost" data-close-modal>Cancelar</button><button class="btn primary">Salvar funcionário</button></div>
+  </form>`,{wide:true});
+  $$('[data-close-modal]').forEach(el=>el.addEventListener('click',closeModal));
+  const form=$('#platform-user-form');
+  const updateAssignmentVisibility=()=>{
+    const role=(data.roles||[]).find(item=>item.code===form.elements.platform_role_code.value);
+    $('#platform-profile-assignment').classList.toggle('hidden',Boolean(role?.is_owner));
+  };
+  form.elements.platform_role_code.addEventListener('change',updateAssignmentVisibility);
+  updateAssignmentVisibility();
+  form.addEventListener('submit',async event=>{
+    event.preventDefault();
+    const payload=formObject(form);
+    payload.profile_ids=$$('input[name="profile_ids"]:checked',form).map(input=>Number(input.value));
+    if(user&&!payload.password) delete payload.password;
+    try{
+      await api(user?`/api/platform-users/${user.id}`:'/api/platform-users',{method:user?'PUT':'POST',body:payload});
+      closeModal();toast(user?'Funcionário atualizado.':'Funcionário criado.');await renderPlatformAccess();
+    }catch(error){toast(error.message,'error');}
+  });
+}
+
 async function renderProfiles() {
   if (!isPlatformOwner()) return navigate('dashboard');
   setPage('Perfis da plataforma','ADMINISTRAÇÃO GLOBAL');
@@ -1485,7 +1584,7 @@ async function renderUsers() {
   state.users=u.users;state.teams=t.teams;state.roles=r.roles||[];
   $('#content').innerHTML=`
     <div class="page-head"><div><h1>Funcionários</h1><p class="muted">Cargos controlam o acesso no servidor, não apenas os botões.</p></div>${has('users.manage')?'<button class="btn primary" id="new-user">＋ Novo usuário</button>':''}</div>
-    <section class="panel"><div class="table-wrap"><table class="data-table"><thead><tr><th>Usuário</th><th>Cargo</th><th>Equipe</th><th>Status</th><th>Último acesso</th><th></th></tr></thead><tbody>${state.users.map(u=>`<tr><td><div class="cell-main">${esc(u.name)}</div><div class="cell-sub">${esc(u.email)}</div></td><td>${badge(u.role_name||roleLabel(u.role_code),u.base_role||u.role_code)}${u.is_contractor?' <span class="badge violet">Contratante</span>':''}</td><td>${esc(u.team_name||'-')}</td><td>${u.active?badge('Ativo','ok'):badge('Bloqueado','cancelada')}</td><td>${fmtDateTime(u.last_login_at)}</td><td>${has('users.manage')?`<button class="btn small" onclick="openUserForm(${u.id})">Editar</button>`:''}</td></tr>`).join('')}</tbody></table></div></section>`;
+    <section class="panel"><div class="table-wrap"><table class="data-table"><thead><tr><th>Usuário</th><th>Cargo</th><th>Equipe</th><th>Status</th><th>Último acesso</th><th></th></tr></thead><tbody>${state.users.map(u=>`<tr><td><div class="cell-main">${esc(u.name)}</div><div class="cell-sub">${esc(u.email)}</div></td><td>${badge(u.role_name||roleLabel(u.role_code),u.base_role||u.role_code)}${u.is_contractor?' <span class="badge violet">Contratante</span>':''}${u.platform_role_code?' <span class="badge cyan">Equipe da Plataforma</span>':''}</td><td>${esc(u.team_name||'-')}</td><td>${u.active?badge('Ativo','ok'):badge('Bloqueado','cancelada')}</td><td>${fmtDateTime(u.last_login_at)}</td><td>${has('users.manage')?`<button class="btn small" onclick="openUserForm(${u.id})">Editar</button>`:''}</td></tr>`).join('')}</tbody></table></div></section>`;
   $('#new-user')?.addEventListener('click',()=>openUserForm());
 }
 

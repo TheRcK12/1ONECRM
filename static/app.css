@@ -331,3 +331,10 @@ html[data-theme="light"] .auth-footer{border-top-color:#dce7ea;color:#7c9096}
 .record-summary-strip strong{font-size:24px;font-weight:600;color:var(--text)}
 html[data-theme="light"] .preset-assets-grid section{background:#f7fafb}
 @media(max-width:760px){.preset-assets-grid{grid-template-columns:1fr}}
+
+/* Acessos globais da plataforma */
+.compact-head{margin-top:26px}
+.role-title-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.platform-profile-options{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:12px}
+.hidden{display:none!important}
+@media(max-width:760px){.platform-profile-options{grid-template-columns:1fr}}

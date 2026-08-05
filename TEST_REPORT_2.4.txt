@@ -1,0 +1,22 @@
+ONE CRM 2.4.0-beta.1
+
+VALIDAÇÕES APROVADAS
+- Compilação Python
+- Sintaxe JavaScript
+- Smoke test completo
+- Multi-profile test
+- Preset integrity test
+- Preset assets test
+- AI providers test
+- OpenAI integration test simulado
+- Online mode test
+- Platform access test
+
+O teste de acessos confirmou:
+- criação de cargo global personalizado;
+- criação de Administrador vinculado a dois perfis;
+- troca somente entre perfis atribuídos;
+- criação de funcionário dentro do perfil por Administrador autorizado;
+- bloqueio da aba/API global para não Donos;
+- criação de um segundo Dono;
+- proteção administrativa dos acessos globais.

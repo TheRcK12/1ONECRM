@@ -22,6 +22,21 @@ from datetime import date
 from typing import Any, Callable
 
 
+PLATFORM_PERMISSIONS: list[tuple[str, str, str]] = [
+    ("platform.profile.read", "Perfis atribuídos", "Visualizar os dados e indicadores dos perfis atribuídos"),
+    ("platform.profile.manage", "Operação", "Criar e alterar registros operacionais nos perfis atribuídos"),
+    ("platform.people.manage", "Pessoas", "Administrar funcionários e equipes dos perfis atribuídos"),
+    ("platform.security.manage", "Segurança", "Administrar cargos e permissões dos perfis atribuídos"),
+    ("platform.integrations.manage", "Integrações", "Administrar integrações dos perfis atribuídos"),
+    ("platform.audit.view", "Auditoria", "Visualizar a auditoria dos perfis atribuídos"),
+    ("platform.backups.manage", "Backups", "Criar e consultar backups da aplicação"),
+]
+
+PLATFORM_ROLE_DEFAULTS: dict[str, set[str]] = {
+    "platform_admin": {code for code, _, _ in PLATFORM_PERMISSIONS},
+}
+
+
 PROFILE_TEMPLATES: dict[str, dict[str, Any]] = {'internet_sales': {'name': 'Venda de internet',
                     'category': 'Telecom',
                     'description': 'Operação comercial de internet com planos, BKO, biometria e instalação.',
@@ -1924,6 +1939,25 @@ def install_profiles(ns: dict[str, Any]) -> None:
                     FOREIGN KEY(team_id) REFERENCES teams(id) ON DELETE SET NULL
                 );
 
+                CREATE TABLE IF NOT EXISTS platform_roles (
+                    code TEXT PRIMARY KEY,
+                    name TEXT NOT NULL UNIQUE COLLATE NOCASE,
+                    description TEXT NOT NULL DEFAULT '',
+                    is_system INTEGER NOT NULL DEFAULT 0,
+                    is_owner INTEGER NOT NULL DEFAULT 0,
+                    active INTEGER NOT NULL DEFAULT 1,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS platform_role_permissions (
+                    role_code TEXT NOT NULL,
+                    permission_code TEXT NOT NULL,
+                    allowed INTEGER NOT NULL DEFAULT 1,
+                    PRIMARY KEY(role_code,permission_code),
+                    FOREIGN KEY(role_code) REFERENCES platform_roles(code) ON DELETE CASCADE
+                );
+
                 CREATE TABLE IF NOT EXISTS profile_settings (
                     profile_id INTEGER NOT NULL,
                     key TEXT NOT NULL,
@@ -1989,6 +2023,27 @@ def install_profiles(ns: dict[str, Any]) -> None:
             add_column(conn, "sales", "profile_id", "INTEGER")
             add_column(conn, "audit_logs", "profile_id", "INTEGER")
             add_column(conn, "ai_usage_logs", "profile_id", "INTEGER")
+            add_column(conn, "users", "platform_role_code", "TEXT")
+
+            conn.execute(
+                """INSERT OR IGNORE INTO platform_roles
+                   (code,name,description,is_system,is_owner,active,created_at,updated_at)
+                   VALUES('owner','Dono da Plataforma','Acesso total à plataforma e a todos os perfis.',1,1,1,?,?)""",
+                (now, now),
+            )
+            conn.execute(
+                """INSERT OR IGNORE INTO platform_roles
+                   (code,name,description,is_system,is_owner,active,created_at,updated_at)
+                   VALUES('platform_admin','Administrador da Plataforma','Administra os perfis atribuídos, sem acesso à criação de Donos.',1,0,1,?,?)""",
+                (now, now),
+            )
+            conn.execute("UPDATE users SET platform_role_code='owner' WHERE role_code='owner' AND COALESCE(platform_role_code,'')=''")
+            for permission in PLATFORM_ROLE_DEFAULTS["platform_admin"]:
+                conn.execute(
+                    "INSERT OR IGNORE INTO platform_role_permissions(role_code,permission_code,allowed) VALUES('platform_admin',?,1)",
+                    (permission,),
+                )
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_users_platform_role ON users(platform_role_code)")
 
             profile = conn.execute("SELECT id FROM business_profiles ORDER BY id LIMIT 1").fetchone()
             if profile:
@@ -2070,6 +2125,47 @@ def install_profiles(ns: dict[str, Any]) -> None:
 
     def is_platform_owner(user: dict[str, Any] | None) -> bool:
         return bool(user and (user.get("platform_role_code") == "owner" or user.get("role_code") == "owner"))
+
+    def platform_role_data(conn: sqlite3.Connection, user_id: int, legacy_role_code: str | None = None) -> tuple[dict[str, Any] | None, set[str]]:
+        row = conn.execute(
+            """SELECT pr.* FROM users u
+               LEFT JOIN platform_roles pr ON pr.code=COALESCE(u.platform_role_code,CASE WHEN u.role_code='owner' THEN 'owner' END)
+               WHERE u.id=?""",
+            (user_id,),
+        ).fetchone()
+        if not row and legacy_role_code == "owner":
+            row = conn.execute("SELECT * FROM platform_roles WHERE code='owner'").fetchone()
+        if not row:
+            return None, set()
+        role = dict(row)
+        permissions = {
+            str(item[0]) for item in conn.execute(
+                "SELECT permission_code FROM platform_role_permissions WHERE role_code=? AND allowed=1",
+                (role["code"],),
+            ).fetchall()
+        }
+        return role, permissions
+
+    def platform_profile_permissions(platform_permissions: set[str]) -> set[str]:
+        all_codes = {code for code, _, _ in ns["PERMISSIONS"]}
+        result: set[str] = set()
+        if "platform.profile.read" in platform_permissions:
+            result.update(code for code in all_codes if code.endswith(".view"))
+            result.update({"sales.all", "ranking.all", "daily.view", "profile.view"} & all_codes)
+        if "platform.profile.manage" in platform_permissions:
+            excluded_prefixes = ("users.", "teams.", "roles.", "integrations.", "audit.", "backups.")
+            result.update(code for code in all_codes if not code.startswith(excluded_prefixes))
+        if "platform.people.manage" in platform_permissions:
+            result.update({"users.view", "users.manage", "teams.view", "teams.manage"} & all_codes)
+        if "platform.security.manage" in platform_permissions:
+            result.update({"roles.view", "roles.manage", "catalogs.view", "catalogs.manage", "plans.view", "plans.manage"} & all_codes)
+        if "platform.integrations.manage" in platform_permissions:
+            result.update({"integrations.view", "integrations.manage"} & all_codes)
+        if "platform.audit.view" in platform_permissions:
+            result.add("audit.view")
+        if "platform.backups.manage" in platform_permissions:
+            result.add("backups.manage")
+        return result & all_codes
 
     def current_profile_id(user: dict[str, Any] | None) -> int:
         try:
@@ -2176,7 +2272,9 @@ def install_profiles(ns: dict[str, Any]) -> None:
             if not session:
                 return None, None
             data = dict(session)
-            owner = data["role_code"] == "owner"
+            platform_role, platform_permissions = platform_role_data(conn, int(data["user_id"]), data.get("role_code"))
+            platform_code = str((platform_role or {}).get("code") or data.get("platform_role_code") or ("owner" if data.get("role_code") == "owner" else ""))
+            owner = platform_code == "owner" or data["role_code"] == "owner"
             profile_id = choose_profile_for_user(conn, data["user_id"], owner, data.get("active_profile_id"))
             if not profile_id:
                 return None, None
@@ -2200,7 +2298,10 @@ def install_profiles(ns: dict[str, Any]) -> None:
 
         user = {key: data[key] for key in data.keys() if key not in {"token_hash", "csrf_token", "expires_at", "created_at", "active_profile_id", "user_id"}}
         user["id"] = data["user_id"]
-        user["platform_role_code"] = data["role_code"]
+        user["platform_role_code"] = platform_code or None
+        user["platform_role_name"] = (platform_role or {}).get("name")
+        user["platform_permissions"] = sorted(platform_permissions)
+        user["is_platform_staff"] = bool(platform_code)
         if owner:
             user["role_code"] = "owner"
             user["effective_role_code"] = "owner"
@@ -2220,12 +2321,14 @@ def install_profiles(ns: dict[str, Any]) -> None:
             user["team_name"] = member.get("membership_team_name")
             user["is_contractor"] = bool(member.get("is_contractor"))
             if user["is_contractor"]:
-                # O vínculo continua baseado em manager para compatibilidade,
-                # mas as permissões efetivas são exclusivamente de leitura.
                 permissions = set(PROFILE_CONTRACTOR_PERMISSIONS)
                 user["role_name"] = "Contratante"
             else:
                 permissions = set(original_get_role_permissions(effective))
+            if platform_code:
+                permissions.update(platform_profile_permissions(platform_permissions))
+                user["role_name"] = (platform_role or {}).get("name") or user["role_name"]
+                user["is_contractor"] = False
             user["permissions"] = sorted(permissions)
         profile_dict = dict(profile)
         user["profile_id"] = profile_id
@@ -2381,6 +2484,10 @@ def install_profiles(ns: dict[str, Any]) -> None:
             "permissions": user.get("permissions", []),
             "must_change_password": bool(user.get("must_change_password")),
             "is_platform_owner": owner,
+            "is_platform_staff": bool(user.get("is_platform_staff")),
+            "platform_role_code": user.get("platform_role_code"),
+            "platform_role_name": user.get("platform_role_name"),
+            "platform_permissions": user.get("platform_permissions", []),
             "is_contractor": bool(user.get("is_contractor")),
             "profile": profile,
             "profiles": profiles,
@@ -2555,7 +2662,7 @@ def install_profiles(ns: dict[str, Any]) -> None:
         if owner:
             with db_connect() as conn:
                 candidates = [dict(row) for row in conn.execute(
-                    "SELECT id,name,email FROM users WHERE active=1 AND role_code<>'owner' ORDER BY name"
+                    "SELECT id,name,email FROM users WHERE active=1 AND role_code<>'owner' AND COALESCE(platform_role_code,'')='' ORDER BY name"
                 ).fetchall()]
         self.send_json(200, {
             "ok": True,
@@ -2716,24 +2823,19 @@ def install_profiles(ns: dict[str, Any]) -> None:
         pid = current_profile_id(actor)
         with db_connect() as conn:
             rows = conn.execute(
-                """SELECT u.id,u.name,u.email,pu.role_code,r.base_role,r.name AS role_name,
+                """SELECT u.id,u.name,u.email,pu.role_code,r.base_role,
+                   COALESCE(pr.name,r.name) AS role_name,u.platform_role_code,pr.name AS platform_role_name,
                    pu.team_id,pu.is_contractor,pu.active,u.must_change_password,u.last_login_at,u.created_at,
                    t.name AS team_name
                    FROM profile_users pu JOIN users u ON u.id=pu.user_id
                    LEFT JOIN roles r ON r.code=pu.role_code
+                   LEFT JOIN platform_roles pr ON pr.code=u.platform_role_code
                    LEFT JOIN teams t ON t.id=pu.team_id AND t.profile_id=pu.profile_id
                    WHERE pu.profile_id=?
                    ORDER BY pu.active DESC,pu.is_contractor DESC,u.name""",
                 (pid,),
             ).fetchall()
         users = [dict(row) for row in rows]
-        if is_platform_owner(actor):
-            included = {item["id"] for item in users}
-            with db_connect() as conn:
-                owners = conn.execute(
-                    "SELECT id,name,email,'owner' AS role_code,'owner' AS base_role,'Dono da Plataforma' AS role_name,NULL AS team_id,0 AS is_contractor,active,must_change_password,last_login_at,created_at,NULL AS team_name FROM users WHERE role_code='owner' ORDER BY name"
-                ).fetchall()
-            users.extend(dict(row) for row in owners if row["id"] not in included)
         self.send_json(200, {"ok": True, "users": users})
 
     def api_user_create(self: Any, actor: dict[str, Any]) -> None:
@@ -2871,6 +2973,292 @@ def install_profiles(ns: dict[str, Any]) -> None:
             conn.execute("DELETE FROM sessions WHERE user_id=?", (user_id,))
         audit(actor["id"], "profile_user.update", "user", user_id, {"profile_id": pid, "fields": list(user_updates) + list(member_updates)}, self.client_ip())
         self.send_json(200, {"ok": True, "message": "Usuário atualizado no perfil."})
+
+    # ------------------------- acessos da plataforma -------------------------
+    def require_platform_owner(self: Any) -> dict[str, Any]:
+        actor, _, _ = self.require_user()
+        if not is_platform_owner(actor):
+            raise ApiError(403, "Somente o Dono da Plataforma pode administrar estes acessos.")
+        return actor
+
+    def platform_global_audit(actor_id: int, action: str, entity_type: str, entity_id: Any, details: Any, ip: str | None) -> None:
+        with db_connect() as conn:
+            conn.execute(
+                """INSERT INTO audit_logs(profile_id,user_id,action,entity_type,entity_id,details,ip_address,created_at)
+                   VALUES(NULL,?,?,?,?,?,?,?)""",
+                (actor_id, action, entity_type, str(entity_id), ns["json_dumps"](details or {}), ip, utc_now()),
+            )
+
+    def api_platform_access(self: Any) -> None:
+        self.require_platform_owner()
+        with db_connect() as conn:
+            role_rows = conn.execute("SELECT * FROM platform_roles ORDER BY is_owner DESC,is_system DESC,name").fetchall()
+            permission_rows = conn.execute(
+                "SELECT role_code,permission_code FROM platform_role_permissions WHERE allowed=1 ORDER BY permission_code"
+            ).fetchall()
+            users = conn.execute(
+                """SELECT u.id,u.name,u.email,u.phone,u.active,u.must_change_password,u.last_login_at,u.created_at,
+                   COALESCE(u.platform_role_code,CASE WHEN u.role_code='owner' THEN 'owner' END) AS platform_role_code,
+                   pr.name AS platform_role_name,pr.is_owner
+                   FROM users u
+                   LEFT JOIN platform_roles pr ON pr.code=COALESCE(u.platform_role_code,CASE WHEN u.role_code='owner' THEN 'owner' END)
+                   WHERE COALESCE(u.platform_role_code,CASE WHEN u.role_code='owner' THEN 'owner' END) IS NOT NULL
+                   ORDER BY u.active DESC,pr.is_owner DESC,u.name"""
+            ).fetchall()
+            profiles = [dict(row) for row in conn.execute(
+                "SELECT id,name,business_type,active FROM business_profiles ORDER BY active DESC,name"
+            ).fetchall()]
+            membership_rows = conn.execute(
+                """SELECT pu.user_id,p.id AS profile_id,p.name AS profile_name
+                   FROM profile_users pu JOIN business_profiles p ON p.id=pu.profile_id
+                   JOIN users u ON u.id=pu.user_id
+                   WHERE pu.active=1 AND COALESCE(u.platform_role_code,'')<>''
+                   ORDER BY p.name"""
+            ).fetchall()
+        role_permissions: dict[str, list[str]] = {}
+        for row in permission_rows:
+            role_permissions.setdefault(str(row["role_code"]), []).append(str(row["permission_code"]))
+        memberships: dict[int, list[dict[str, Any]]] = {}
+        for row in membership_rows:
+            memberships.setdefault(int(row["user_id"]), []).append(
+                {"id": int(row["profile_id"]), "name": row["profile_name"]}
+            )
+        role_items = []
+        for row in role_rows:
+            item = dict(row)
+            item["active"] = bool(item["active"])
+            item["is_system"] = bool(item["is_system"])
+            item["is_owner"] = bool(item["is_owner"])
+            item["permissions"] = sorted(role_permissions.get(item["code"], []))
+            role_items.append(item)
+        user_items = []
+        for row in users:
+            item = dict(row)
+            item["active"] = bool(item["active"])
+            item["must_change_password"] = bool(item["must_change_password"])
+            item["is_owner"] = bool(item.get("is_owner"))
+            item["profiles"] = memberships.get(int(item["id"]), [])
+            user_items.append(item)
+        self.send_json(200, {
+            "ok": True,
+            "roles": role_items,
+            "permissions": [
+                {"code": code, "module": module, "description": description}
+                for code, module, description in PLATFORM_PERMISSIONS
+            ],
+            "users": user_items,
+            "profiles": profiles,
+        })
+
+    def api_platform_role_create(self: Any, actor: dict[str, Any]) -> None:
+        if not is_platform_owner(actor):
+            raise ApiError(403, "Somente o Dono da Plataforma pode criar cargos globais.")
+        data = self.read_json()
+        name = str(data.get("name") or "").strip()
+        raw_code = re.sub(r"[^a-z0-9_]+", "_", str(data.get("code") or name).lower()).strip("_")
+        code = raw_code[:64]
+        if len(name) < 2 or not code or code == "owner":
+            raise ApiError(400, "Nome ou código do cargo inválido.")
+        valid = {item[0] for item in PLATFORM_PERMISSIONS}
+        selected = sorted({str(item) for item in (data.get("permissions") or []) if str(item) in valid})
+        now = utc_now()
+        with db_connect() as conn:
+            try:
+                conn.execute(
+                    """INSERT INTO platform_roles(code,name,description,is_system,is_owner,active,created_at,updated_at)
+                       VALUES(?,?,?,0,0,1,?,?)""",
+                    (code, name, str(data.get("description") or "").strip(), now, now),
+                )
+            except sqlite3.IntegrityError:
+                raise ApiError(409, "Já existe um cargo da plataforma com este nome ou código.")
+            conn.executemany(
+                "INSERT INTO platform_role_permissions(role_code,permission_code,allowed) VALUES(?,?,1)",
+                [(code, permission) for permission in selected],
+            )
+        platform_global_audit(
+            actor["id"], "platform_role.create", "platform_role", code,
+            {"name": name}, self.client_ip()
+        )
+        self.send_json(201, {"ok": True, "code": code, "message": "Cargo da plataforma criado."})
+
+    def api_platform_role_update(self: Any, actor: dict[str, Any], role_code: str) -> None:
+        if not is_platform_owner(actor):
+            raise ApiError(403, "Somente o Dono da Plataforma pode alterar cargos globais.")
+        data = self.read_json()
+        with db_connect() as conn:
+            role = conn.execute("SELECT * FROM platform_roles WHERE code=?", (role_code,)).fetchone()
+            if not role:
+                raise ApiError(404, "Cargo da plataforma não encontrado.")
+            if role["is_owner"]:
+                raise ApiError(400, "O cargo Dono da Plataforma é protegido.")
+            updates: dict[str, Any] = {}
+            if "name" in data:
+                name = str(data.get("name") or "").strip()
+                if len(name) < 2:
+                    raise ApiError(400, "Nome inválido.")
+                updates["name"] = name
+            if "description" in data:
+                updates["description"] = str(data.get("description") or "").strip()
+            if "active" in data:
+                active = 1 if bool(data.get("active")) else 0
+                if not active and conn.execute(
+                    "SELECT COUNT(*) FROM users WHERE platform_role_code=? AND active=1", (role_code,)
+                ).fetchone()[0]:
+                    raise ApiError(400, "Transfira ou desative os funcionários antes de desativar este cargo.")
+                updates["active"] = active
+            selected = None
+            if "permissions" in data:
+                valid = {item[0] for item in PLATFORM_PERMISSIONS}
+                selected = sorted({str(item) for item in (data.get("permissions") or []) if str(item) in valid})
+            if not updates and selected is None:
+                raise ApiError(400, "Nenhuma alteração enviada.")
+            if updates:
+                updates["updated_at"] = utc_now()
+                assignments = ",".join(f"{key}=?" for key in updates)
+                conn.execute(f"UPDATE platform_roles SET {assignments} WHERE code=?", [*updates.values(), role_code])
+            if selected is not None:
+                conn.execute("DELETE FROM platform_role_permissions WHERE role_code=?", (role_code,))
+                conn.executemany(
+                    "INSERT INTO platform_role_permissions(role_code,permission_code,allowed) VALUES(?,?,1)",
+                    [(role_code, permission) for permission in selected],
+                )
+        platform_global_audit(
+            actor["id"], "platform_role.update", "platform_role", role_code,
+            {"fields": list(updates)}, self.client_ip()
+        )
+        self.send_json(200, {"ok": True, "message": "Cargo da plataforma atualizado."})
+
+    def validate_platform_profiles(conn: sqlite3.Connection, profile_ids: Any) -> list[int]:
+        ids = sorted({int(item) for item in (profile_ids or []) if str(item).isdigit() and int(item) > 0})
+        if not ids:
+            return []
+        placeholders = ",".join("?" for _ in ids)
+        found = {
+            int(row[0]) for row in conn.execute(
+                f"SELECT id FROM business_profiles WHERE id IN ({placeholders}) AND active=1", ids
+            ).fetchall()
+        }
+        if found != set(ids):
+            raise ApiError(400, "Um ou mais perfis selecionados são inválidos ou inativos.")
+        return ids
+
+    def api_platform_user_create(self: Any, actor: dict[str, Any]) -> None:
+        if not is_platform_owner(actor):
+            raise ApiError(403, "Somente o Dono da Plataforma pode criar estes funcionários.")
+        data = self.read_json()
+        name = str(data.get("name") or "").strip()
+        email = ns["normalize_email"](data.get("email") or "")
+        password = str(data.get("password") or "")
+        role_code = str(data.get("platform_role_code") or "").strip()
+        if len(name) < 3 or "@" not in email:
+            raise ApiError(400, "Nome ou e-mail inválido.")
+        error = ns["validate_password"](password)
+        if error:
+            raise ApiError(400, error)
+        now = utc_now()
+        with db_connect() as conn:
+            role = conn.execute(
+                "SELECT * FROM platform_roles WHERE code=? AND active=1", (role_code,)
+            ).fetchone()
+            if not role:
+                raise ApiError(400, "Cargo da plataforma inválido ou inativo.")
+            if conn.execute("SELECT 1 FROM users WHERE email=? COLLATE NOCASE", (email,)).fetchone():
+                raise ApiError(409, "Este e-mail já está em uso.")
+            profiles = [] if role["is_owner"] else validate_platform_profiles(conn, data.get("profile_ids"))
+            if not role["is_owner"] and not profiles:
+                raise ApiError(400, "Selecione ao menos um perfil para este funcionário.")
+            base_role = "owner" if role["is_owner"] else "manager"
+            cur = conn.execute(
+                """INSERT INTO users(name,email,password_hash,role_code,platform_role_code,active,must_change_password,created_at,updated_at)
+                   VALUES(?,?,?,?,?,1,?,?,?)""",
+                (
+                    name, email, ns["hash_password"](password), base_role, role_code,
+                    1 if data.get("must_change_password", True) else 0, now, now,
+                ),
+            )
+            user_id = int(cur.lastrowid)
+            for profile_id in profiles:
+                conn.execute(
+                    """INSERT INTO profile_users(profile_id,user_id,role_code,team_id,is_contractor,active,created_at,updated_at)
+                       VALUES(?,?,'manager',NULL,0,1,?,?)""",
+                    (profile_id, user_id, now, now),
+                )
+        platform_global_audit(
+            actor["id"], "platform_user.create", "user", user_id,
+            {"role": role_code, "profiles": profiles}, self.client_ip()
+        )
+        self.send_json(201, {"ok": True, "id": user_id, "message": "Funcionário da plataforma criado."})
+
+    def api_platform_user_update(self: Any, actor: dict[str, Any], user_id: int) -> None:
+        if not is_platform_owner(actor):
+            raise ApiError(403, "Somente o Dono da Plataforma pode alterar estes funcionários.")
+        data = self.read_json()
+        with db_connect() as conn:
+            target = conn.execute(
+                """SELECT u.*,COALESCE(u.platform_role_code,CASE WHEN u.role_code='owner' THEN 'owner' END) AS effective_platform_role
+                   FROM users u WHERE u.id=?""",
+                (user_id,),
+            ).fetchone()
+            if not target or not target["effective_platform_role"]:
+                raise ApiError(404, "Funcionário da plataforma não encontrado.")
+            role_code = str(data.get("platform_role_code") or target["effective_platform_role"]).strip()
+            role = conn.execute(
+                "SELECT * FROM platform_roles WHERE code=? AND active=1", (role_code,)
+            ).fetchone()
+            if not role:
+                raise ApiError(400, "Cargo da plataforma inválido ou inativo.")
+            active = 1 if bool(data.get("active", target["active"])) else 0
+            current_is_owner = target["effective_platform_role"] == "owner"
+            becoming_owner = bool(role["is_owner"])
+            owner_count = conn.execute(
+                """SELECT COUNT(*) FROM users
+                   WHERE active=1 AND COALESCE(platform_role_code,CASE WHEN role_code='owner' THEN 'owner' END)='owner'"""
+            ).fetchone()[0]
+            if current_is_owner and (not becoming_owner or not active) and owner_count <= 1:
+                raise ApiError(400, "O último Dono ativo não pode ser removido ou desativado.")
+            profiles = [] if becoming_owner else validate_platform_profiles(conn, data.get("profile_ids"))
+            if not becoming_owner and not profiles:
+                raise ApiError(400, "Selecione ao menos um perfil para este funcionário.")
+            updates: dict[str, Any] = {
+                "role_code": "owner" if becoming_owner else "manager",
+                "platform_role_code": role_code,
+                "active": active,
+                "must_change_password": 1 if bool(data.get("must_change_password", target["must_change_password"])) else 0,
+                "updated_at": utc_now(),
+            }
+            if "name" in data:
+                name = str(data.get("name") or "").strip()
+                if len(name) < 3:
+                    raise ApiError(400, "Nome inválido.")
+                updates["name"] = name
+            if "email" in data:
+                email = ns["normalize_email"](data.get("email") or "")
+                if "@" not in email:
+                    raise ApiError(400, "E-mail inválido.")
+                updates["email"] = email
+            if data.get("password"):
+                error = ns["validate_password"](str(data["password"]))
+                if error:
+                    raise ApiError(400, error)
+                updates["password_hash"] = ns["hash_password"](str(data["password"]))
+            assignments = ",".join(f"{key}=?" for key in updates)
+            try:
+                conn.execute(f"UPDATE users SET {assignments} WHERE id=?", [*updates.values(), user_id])
+            except sqlite3.IntegrityError:
+                raise ApiError(409, "Este e-mail já está em uso.")
+            conn.execute("DELETE FROM profile_users WHERE user_id=?", (user_id,))
+            for profile_id in profiles:
+                conn.execute(
+                    """INSERT INTO profile_users(profile_id,user_id,role_code,team_id,is_contractor,active,created_at,updated_at)
+                       VALUES(?,?,'manager',NULL,0,1,?,?)""",
+                    (profile_id, user_id, utc_now(), utc_now()),
+                )
+            conn.execute("DELETE FROM sessions WHERE user_id=?", (user_id,))
+        platform_global_audit(
+            actor["id"], "platform_user.update", "user", user_id,
+            {"role": role_code, "profiles": profiles}, self.client_ip()
+        )
+        self.send_json(200, {"ok": True, "message": "Funcionário da plataforma atualizado."})
 
     # ------------------------- equipes -------------------------
     def api_teams_list(self: Any) -> None:
@@ -3954,6 +4342,8 @@ def install_profiles(ns: dict[str, Any]) -> None:
         query = ns["parse_qs"](parsed.query)
         if path == "/api/profiles":
             return self.api_profiles()
+        if path == "/api/platform-access":
+            return self.api_platform_access()
         if path == "/api/cash":
             return self.api_cash(query)
         if path == "/api/profile-records":
@@ -3969,6 +4359,14 @@ def install_profiles(ns: dict[str, Any]) -> None:
         self.check_csrf(csrf)
         if method == "POST" and path == "/api/profiles":
             return self.api_profile_create(user)
+        if method == "POST" and path == "/api/platform-roles":
+            return self.api_platform_role_create(user)
+        if method == "PUT" and path.startswith("/api/platform-roles/"):
+            return self.api_platform_role_update(user, path.rsplit("/", 1)[1])
+        if method == "POST" and path == "/api/platform-users":
+            return self.api_platform_user_create(user)
+        if method == "PUT" and path.startswith("/api/platform-users/"):
+            return self.api_platform_user_update(user, int(path.rsplit("/", 1)[1]))
         if method == "PUT" and path.startswith("/api/profiles/") and path != "/api/profiles/switch":
             return self.api_profile_update_business(user, int(path.rsplit("/", 1)[1]))
         if method == "POST" and path == "/api/profiles/switch":
@@ -3987,6 +4385,12 @@ def install_profiles(ns: dict[str, Any]) -> None:
     Handler.route_get = route_get
     Handler.route_write = route_write
     Handler.api_profiles = api_profiles
+    Handler.require_platform_owner = require_platform_owner
+    Handler.api_platform_access = api_platform_access
+    Handler.api_platform_role_create = api_platform_role_create
+    Handler.api_platform_role_update = api_platform_role_update
+    Handler.api_platform_user_create = api_platform_user_create
+    Handler.api_platform_user_update = api_platform_user_update
     Handler.api_profile_create = api_profile_create
     Handler.api_profile_update_business = api_profile_update_business
     Handler.api_profile_switch = api_profile_switch

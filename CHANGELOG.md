@@ -1,3 +1,12 @@
+# ONE CRM 2.4.0-beta.1
+
+- Nova aba Acessos da Plataforma, visível somente para Donos.
+- Criação de outros Donos, administradores e cargos globais personalizados.
+- Funcionários globais podem ser vinculados a um ou vários perfis.
+- Administradores acessam somente os perfis atribuídos e não conseguem criar Donos.
+- Funcionários globais foram separados da lista de funcionários de cada perfil.
+- Proteção do último Dono ativo e auditoria das alterações globais.
+
 # ONE CRM 2.3.0-beta.1
 
 - Revisão completa dos presets e formulários de cada segmento.

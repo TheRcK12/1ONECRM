@@ -1,6 +1,6 @@
 {
   "name": "ONE CRM",
-  "version": "2.3.0-beta.1",
+  "version": "2.4.0-beta.1",
   "channel": "beta-online",
-  "description": "Presets revisados com formulários próprios, referências entre módulos e isolamento de catálogos e cargos por perfil."
+  "description": "Aba exclusiva de Donos para criar outros Donos, cargos globais, administradores e funcionários da plataforma."
 }
