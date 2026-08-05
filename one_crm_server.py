@@ -40,9 +40,26 @@ from one_crm_ai import (
 )
 
 APP_NAME = "ONE CRM"
-APP_VERSION = "2.4.0-beta.1"
+APP_VERSION = "2.5.0-beta.1"
 BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
+
+
+def env_flag(name: str, default: bool = False) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() not in {"0", "false", "no", "off", ""}
+
+
+def env_int(name: str, default: int, minimum: int = 0, maximum: int | None = None) -> int:
+    raw = (os.getenv(name) or "").strip()
+    try:
+        value = int(raw) if raw else int(default)
+    except ValueError:
+        value = int(default)
+    value = max(minimum, value)
+    return min(value, maximum) if maximum is not None else value
 IS_RAILWAY = bool(
     os.getenv("RAILWAY_ENVIRONMENT")
     or os.getenv("RAILWAY_PROJECT_ID")
@@ -71,17 +88,32 @@ CONFIG_PATH = BASE_DIR / "config.json"
 PID_PATH = Path(os.getenv("ONE_CRM_PID_PATH", "/tmp/one_crm.pid" if IS_RAILWAY else str(BASE_DIR / "server.pid")))
 MAX_BODY = 2 * 1024 * 1024
 COOKIE_NAME = "onecrm_session"
-SECURE_COOKIES = (
-    os.getenv("ONE_CRM_SECURE_COOKIES", "1" if IS_RAILWAY else "0").strip().lower()
-    not in {"0", "false", "no", "off"}
-)
-TRUST_PROXY_HEADERS = (
-    os.getenv("ONE_CRM_TRUST_PROXY_HEADERS", "1" if IS_RAILWAY else "0").strip().lower()
-    not in {"0", "false", "no", "off"}
-)
+SECURE_COOKIES = env_flag("ONE_CRM_SECURE_COOKIES", IS_RAILWAY)
+TRUST_PROXY_HEADERS = env_flag("ONE_CRM_TRUST_PROXY_HEADERS", IS_RAILWAY)
+REQUIRE_PERSISTENT_STORAGE = env_flag("ONE_CRM_REQUIRE_PERSISTENT_STORAGE", IS_RAILWAY)
+ALLOW_EPHEMERAL_STORAGE = env_flag("ONE_CRM_ALLOW_EPHEMERAL_STORAGE", False)
+REQUIRE_SETUP_TOKEN = env_flag("ONE_CRM_REQUIRE_SETUP_TOKEN", IS_RAILWAY)
 SETUP_TOKEN = (os.getenv("ONE_CRM_SETUP_TOKEN") or "").strip()
+ALLOWED_ORIGINS = {
+    item.strip().rstrip("/")
+    for item in (os.getenv("ONE_CRM_ALLOWED_ORIGINS") or "").split(",")
+    if item.strip()
+}
+CONTENT_SECURITY_POLICY = "; ".join([
+    "default-src 'self'",
+    "base-uri 'self'",
+    "object-src 'none'",
+    "frame-ancestors 'self'",
+    "form-action 'self'",
+    "script-src 'self'",
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data:",
+    "font-src 'self' data:",
+    "connect-src 'self' https://brasilapi.com.br https://viacep.com.br https://opencep.com",
+    "frame-src 'self' https://app.powerbi.com https://*.powerbi.com",
+])
 SETUP_LOCK = threading.Lock()
-LOG_MAX_BYTES = max(256 * 1024, int(os.getenv("ONE_CRM_LOG_MAX_BYTES", str(5 * 1024 * 1024))))
+LOG_MAX_BYTES = max(256 * 1024, env_int("ONE_CRM_LOG_MAX_BYTES", 5 * 1024 * 1024, 256 * 1024))
 
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 BACKUP_DIR.mkdir(parents=True, exist_ok=True)
@@ -89,8 +121,8 @@ LOG_DIR.mkdir(parents=True, exist_ok=True)
 LOG_LOCK = threading.Lock()
 AI_RATE_LOCK = threading.Lock()
 AI_RATE_BUCKETS: dict[int, list[float]] = {}
-AI_RATE_LIMIT = max(1, int(os.getenv("ONE_CRM_AI_RATE_LIMIT", "10")))
-AI_RATE_WINDOW_SECONDS = max(10, int(os.getenv("ONE_CRM_AI_RATE_WINDOW_SECONDS", "60")))
+AI_RATE_LIMIT = env_int("ONE_CRM_AI_RATE_LIMIT", 10, 1, 1000)
+AI_RATE_WINDOW_SECONDS = env_int("ONE_CRM_AI_RATE_WINDOW_SECONDS", 60, 10, 86400)
 
 
 # ------------------------- utilidades -------------------------
@@ -297,6 +329,15 @@ def load_config() -> dict[str, Any]:
             default.update(data)
     except Exception:
         pass
+
+    # Em produção, valores operacionais podem ser ajustados pelo Railway sem
+    # editar arquivos ou expor configuração no repositório.
+    if os.getenv("ONE_CRM_SESSION_HOURS"):
+        default["session_hours"] = env_int("ONE_CRM_SESSION_HOURS", int(default.get("session_hours", 12)), 1, 168)
+    if os.getenv("ONE_CRM_AUTOMATIC_DAILY_BACKUP") is not None:
+        default["automatic_daily_backup"] = env_flag("ONE_CRM_AUTOMATIC_DAILY_BACKUP", True)
+    if os.getenv("ONE_CRM_BACKUP_RETENTION"):
+        default["automatic_backup_retention"] = env_int("ONE_CRM_BACKUP_RETENTION", int(default.get("automatic_backup_retention", 14)), 1, 365)
     return default
 
 
@@ -317,6 +358,76 @@ def log(message: str) -> None:
                 fh.write(text + "\n")
         except Exception:
             pass
+
+
+def persistent_storage_enabled() -> bool:
+    if not IS_RAILWAY:
+        return True
+    return bool(RAILWAY_VOLUME_PATH)
+
+
+def storage_health() -> dict[str, Any]:
+    result: dict[str, Any] = {
+        "path": str(DATA_DIR),
+        "persistent": persistent_storage_enabled(),
+        "writable": False,
+    }
+    try:
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
+        probe = DATA_DIR / ".onecrm-write-probe"
+        probe.write_text(utc_now(), encoding="utf-8")
+        probe.unlink(missing_ok=True)
+        usage = shutil.disk_usage(DATA_DIR)
+        result.update({
+            "writable": True,
+            "free_bytes": int(usage.free),
+            "total_bytes": int(usage.total),
+        })
+    except Exception as exc:
+        result["error"] = str(exc)[:200]
+    return result
+
+
+def validate_runtime_before_database() -> None:
+    errors: list[str] = []
+    warnings: list[str] = []
+    storage = storage_health()
+
+    if not storage.get("writable"):
+        errors.append(f"A pasta de dados não está gravável: {DATA_DIR}")
+    if IS_RAILWAY and REQUIRE_PERSISTENT_STORAGE and not persistent_storage_enabled() and not ALLOW_EPHEMERAL_STORAGE:
+        errors.append(
+            "Nenhum Volume Railway foi detectado. Anexe um Volume em /app/data antes de iniciar o ONE CRM."
+        )
+    if IS_RAILWAY and not SECURE_COOKIES:
+        errors.append("ONE_CRM_SECURE_COOKIES precisa estar habilitado no Railway.")
+    if IS_RAILWAY and not TRUST_PROXY_HEADERS:
+        errors.append("ONE_CRM_TRUST_PROXY_HEADERS precisa estar habilitado no Railway.")
+    if IS_RAILWAY and ALLOW_EPHEMERAL_STORAGE:
+        warnings.append("Armazenamento efêmero foi liberado explicitamente; os dados podem desaparecer em um deploy.")
+
+    for warning in warnings:
+        log(f"AVISO DE PRODUÇÃO: {warning}")
+    if errors:
+        for error in errors:
+            log(f"ERRO DE PRODUÇÃO: {error}")
+        raise RuntimeError("Configuração de produção inválida. Consulte os logs acima.")
+
+
+def validate_runtime_after_database() -> None:
+    if not REQUIRE_SETUP_TOKEN:
+        return
+    with db_connect() as conn:
+        owner_count = int(conn.execute(
+            "SELECT COUNT(*) FROM users WHERE role_code='owner' AND active=1"
+        ).fetchone()[0])
+    if owner_count == 0:
+        if len(SETUP_TOKEN) < 32:
+            raise RuntimeError(
+                "Defina ONE_CRM_SETUP_TOKEN com pelo menos 32 caracteres antes do primeiro acesso."
+            )
+        if SETUP_TOKEN.lower() in {"troque-por-um-token-longo-e-secreto", "substitua", "changeme"}:
+            raise RuntimeError("ONE_CRM_SETUP_TOKEN ainda contém um valor de exemplo inseguro.")
 
 
 # ------------------------- banco -------------------------
@@ -989,6 +1100,42 @@ class OneCRMHandler(BaseHTTPRequestHandler):
         if not received or not hmac.compare_digest(received, expected):
             raise ApiError(403, "Token de segurança inválido. Atualize a página.")
 
+    def expected_origin(self) -> str:
+        host = (self.headers.get("X-Forwarded-Host") if TRUST_PROXY_HEADERS else "") or self.headers.get("Host", "")
+        host = host.split(",", 1)[0].strip()
+        scheme = "https" if self.is_https() else "http"
+        return f"{scheme}://{host}".rstrip("/") if host else ""
+
+    def check_request_origin(self) -> None:
+        # CSRF continua sendo obrigatório após o login. Esta validação adicional
+        # bloqueia requisições de páginas externas antes mesmo de ler o corpo.
+        fetch_site = (self.headers.get("Sec-Fetch-Site") or "").strip().lower()
+        if fetch_site and fetch_site not in {"same-origin", "none"}:
+            raise ApiError(403, "Origem da requisição não autorizada.")
+        origin = (self.headers.get("Origin") or "").strip().rstrip("/")
+        if not origin:
+            return
+        allowed = set(ALLOWED_ORIGINS)
+        expected = self.expected_origin()
+        if expected:
+            allowed.add(expected)
+        if origin not in allowed:
+            raise ApiError(403, "Origem da requisição não autorizada.")
+
+    def send_security_headers(self) -> None:
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("X-Frame-Options", "SAMEORIGIN")
+        self.send_header("Referrer-Policy", "same-origin")
+        self.send_header("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=(), usb=()")
+        self.send_header("Cross-Origin-Opener-Policy", "same-origin")
+        self.send_header("Cross-Origin-Resource-Policy", "same-origin")
+        self.send_header("X-Permitted-Cross-Domain-Policies", "none")
+        self.send_header("X-Robots-Tag", "noindex, nofollow, noarchive")
+        csp = CONTENT_SECURITY_POLICY + ("; upgrade-insecure-requests" if self.is_https() else "")
+        self.send_header("Content-Security-Policy", csp)
+        if self.is_https():
+            self.send_header("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+
     def read_json(self) -> dict[str, Any]:
         length = int(self.headers.get("Content-Length", "0") or 0)
         if length > MAX_BODY:
@@ -1008,12 +1155,7 @@ class OneCRMHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
-        self.send_header("X-Content-Type-Options", "nosniff")
-        self.send_header("X-Frame-Options", "SAMEORIGIN")
-        self.send_header("Referrer-Policy", "same-origin")
-        self.send_header("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
-        if self.is_https():
-            self.send_header("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+        self.send_security_headers()
         self.send_header("Connection", "close")
         if extra_headers:
             for key, value in extra_headers.items():
@@ -1035,10 +1177,7 @@ class OneCRMHandler(BaseHTTPRequestHandler):
             self.send_header("Content-Type", content_type)
             self.send_header("Content-Length", str(len(data)))
             self.send_header("Cache-Control", "no-cache")
-            self.send_header("X-Content-Type-Options", "nosniff")
-            self.send_header("Referrer-Policy", "same-origin")
-            if self.is_https():
-                self.send_header("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+            self.send_security_headers()
             self.send_header("Connection", "close")
             self.end_headers()
             self.wfile.write(data)
@@ -1054,6 +1193,8 @@ class OneCRMHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "text/csv; charset=utf-8")
         self.send_header("Content-Disposition", f'attachment; filename="{filename}"')
         self.send_header("Content-Length", str(len(data)))
+        self.send_header("Cache-Control", "no-store")
+        self.send_security_headers()
         self.send_header("Connection", "close")
         self.end_headers()
         self.wfile.write(data)
@@ -1138,21 +1279,33 @@ class OneCRMHandler(BaseHTTPRequestHandler):
             try:
                 with db_connect() as conn:
                     conn.execute("SELECT 1").fetchone()
-                return self.send_json(200, {
-                    "ok": True,
+                storage = storage_health()
+                healthy = bool(storage.get("writable"))
+                if IS_RAILWAY and REQUIRE_PERSISTENT_STORAGE and not persistent_storage_enabled() and not ALLOW_EPHEMERAL_STORAGE:
+                    healthy = False
+                payload = {
+                    "ok": healthy,
                     "app": APP_NAME,
                     "version": APP_VERSION,
                     "time": utc_now(),
                     "database": "ok",
-                    "persistent_storage": bool(RAILWAY_VOLUME_PATH or os.getenv("ONE_CRM_DATA_DIR")),
-                })
-            except Exception:
+                    "persistent_storage": bool(storage.get("persistent")),
+                    "storage": {
+                        "persistent": bool(storage.get("persistent")),
+                        "writable": bool(storage.get("writable")),
+                        "free_mb": round(int(storage.get("free_bytes", 0)) / 1024 / 1024, 1),
+                    },
+                }
+                return self.send_json(200 if healthy else 503, payload)
+            except Exception as exc:
+                log(f"Healthcheck falhou: {exc}")
                 return self.send_json(503, {"ok": False, "app": APP_NAME, "database": "unavailable"})
         raise ApiError(404, "Rota não encontrada.")
 
     def route_write(self, method: str) -> None:
         parsed = urlparse(self.path)
         path = parsed.path.rstrip("/") or "/"
+        self.check_request_origin()
 
         if method == "POST" and path == "/api/setup":
             return self.api_setup()
@@ -1222,7 +1375,7 @@ class OneCRMHandler(BaseHTTPRequestHandler):
             "authenticated": bool(user),
             "runtime": {
                 "online": IS_RAILWAY,
-                "persistent_storage": bool(RAILWAY_VOLUME_PATH or os.getenv("ONE_CRM_DATA_DIR")),
+                "persistent_storage": persistent_storage_enabled(),
             },
         }
         if user:
@@ -1310,12 +1463,12 @@ class OneCRMHandler(BaseHTTPRequestHandler):
             audit(user["id"], "auth.logout", "user", user["id"], {}, self.client_ip())
         revoke_session(raw)
         secure = "; Secure" if self.is_https() else ""
-        self.send_json(200, {"ok": True}, {"Set-Cookie": f"{COOKIE_NAME}=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax{secure}"})
+        self.send_json(200, {"ok": True}, {"Set-Cookie": f"{COOKIE_NAME}=; Path=/; Max-Age=0; HttpOnly; SameSite=Strict{secure}"})
 
     def session_cookie(self, raw: str) -> str:
         hours = max(1, int(load_config().get("session_hours", 12)))
         secure = "; Secure" if self.is_https() else ""
-        return f"{COOKIE_NAME}={raw}; Path=/; Max-Age={hours * 3600}; HttpOnly; SameSite=Lax{secure}"
+        return f"{COOKIE_NAME}={raw}; Path=/; Max-Age={hours * 3600}; HttpOnly; SameSite=Strict; Priority=High{secure}"
 
     def public_user(self, user: dict[str, Any]) -> dict[str, Any]:
         effective = user.get("effective_role_code") or effective_role_code(user)
@@ -2349,7 +2502,7 @@ class OneCRMHandler(BaseHTTPRequestHandler):
             conn.execute("DELETE FROM sessions WHERE user_id=?", (user["id"],))
         audit(user["id"], "user.password_change", "user", user["id"], {}, self.client_ip())
         self.send_json(200, {"ok": True, "message": "Senha alterada. Entre novamente."},
-                       {"Set-Cookie": f"{COOKIE_NAME}=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax{'; Secure' if self.is_https() else ''}"})
+                       {"Set-Cookie": f"{COOKIE_NAME}=; Path=/; Max-Age=0; HttpOnly; SameSite=Strict{'; Secure' if self.is_https() else ''}"})
 
     def api_teams_list(self) -> None:
         user, _, _ = self.require_user()
@@ -2917,9 +3070,12 @@ def main() -> None:
     print()
     if sys.version_info < (3, 10):
         print("ERRO: é necessário Python 3.10 ou superior.")
-        input("Pressione ENTER para fechar...")
+        if not IS_RAILWAY:
+            input("Pressione ENTER para fechar...")
         raise SystemExit(1)
+    validate_runtime_before_database()
     init_database()
+    validate_runtime_after_database()
     maybe_daily_backup()
     config = load_config()
     railway_port = (os.getenv("PORT") or "").strip()
@@ -2944,8 +3100,8 @@ def main() -> None:
     url = f"http://{display_host}:{port}"
     print(f"ONE CRM iniciado em: {url}")
     print(f"Modo: {'Railway / online' if IS_RAILWAY else 'local'}")
-    print(f"Armazenamento persistente: {'sim' if RAILWAY_VOLUME_PATH or os.getenv('ONE_CRM_DATA_DIR') else 'não'}")
-    if IS_RAILWAY and not RAILWAY_VOLUME_PATH and not os.getenv("ONE_CRM_DATA_DIR"):
+    print(f"Armazenamento persistente: {'sim' if persistent_storage_enabled() else 'não'}")
+    if IS_RAILWAY and not persistent_storage_enabled():
         print("AVISO: nenhum Volume foi detectado; os dados podem ser perdidos em um novo deploy.")
     if port != preferred:
         print(f"Aviso: a porta {preferred} estava ocupada; usando {port}.")

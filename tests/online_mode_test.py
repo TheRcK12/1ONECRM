@@ -42,9 +42,8 @@ def main() -> None:
                 "RAILWAY_PROJECT_ID": "test-project",
                 "RAILWAY_VOLUME_MOUNT_PATH": data_dir,
                 "PORT": PORT,
-                "ONE_CRM_SETUP_TOKEN": "token-de-teste-123",
-                # O teste usa HTTP local. No domínio Railway, mantenha em 1.
-                "ONE_CRM_SECURE_COOKIES": "0",
+                "ONE_CRM_SETUP_TOKEN": "token-de-teste-online-abcdefghijklmnopqrstuvwxyz-123456",
+                "ONE_CRM_SECURE_COOKIES": "1",
                 "ONE_CRM_TRUST_PROXY_HEADERS": "1",
                 "ONE_CRM_NO_BROWSER": "1",
             }
@@ -94,7 +93,7 @@ def main() -> None:
                     "name": "Dono Online",
                     "email": "dono@example.com",
                     "password": "Senha123",
-                    "setup_token": "token-de-teste-123",
+                    "setup_token": "token-de-teste-online-abcdefghijklmnopqrstuvwxyz-123456",
                 },
             )
             assert status == 201 and created["ok"] is True

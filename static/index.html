@@ -5,14 +5,9 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#0d1518">
   <title>ONE CRM</title>
-  <script>
-    (() => {
-      const saved = localStorage.getItem('one-crm-theme');
-      document.documentElement.dataset.theme = saved === 'light' ? 'light' : 'dark';
-    })();
-  </script>
+  <script src="/static/theme-init.js?v=2.5.0"></script>
   <link rel="icon" type="image/svg+xml" href="/static/one-crm-logo.svg">
-  <link rel="stylesheet" href="/static/app.css?v=1.9.0">
+  <link rel="stylesheet" href="/static/app.css?v=2.5.0">
 </head>
 <body>
   <div id="toast-root" class="toast-root"></div>
@@ -183,6 +178,6 @@
   </div>
 
   <div id="modal-root"></div>
-  <script src="/static/app.js?v=2.0.0" defer></script>
+  <script src="/static/app.js?v=2.5.0" defer></script>
 </body>
 </html>

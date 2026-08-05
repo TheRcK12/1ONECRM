@@ -1,3 +1,19 @@
+# ONE CRM 2.5.0-beta.1
+
+## Railway Production
+
+- Volume obrigatório em produção, com falha segura quando ausente.
+- Token forte obrigatório antes da criação do primeiro Dono.
+- Entrypoint corrige permissões do Volume e abandona privilégios.
+- Cookies `SameSite=Strict` e cabeçalhos de segurança ampliados.
+- Content Security Policy sem JavaScript inline.
+- Validação de origem em requisições de escrita.
+- Healthcheck ampliado para banco e armazenamento.
+- GitHub Actions, Docker smoke test, CodeQL e Dependabot.
+- Documentação e variáveis do Railway atualizadas.
+
+---
+
 # ONE CRM 2.4.0-beta.1
 
 - Nova aba Acessos da Plataforma, visível somente para Donos.

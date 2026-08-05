@@ -1,0 +1,83 @@
+name: ONE CRM CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: onecrm-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  python-tests:
+    name: Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+    steps:
+      - name: Baixar código
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Compilar fontes
+        run: python -m compileall -q .
+
+      - name: Executar testes funcionais
+        run: |
+          python tests/smoke_test.py
+          python tests/multi_profile_test.py
+          python tests/preset_integrity_test.py
+          python tests/preset_assets_test.py
+          python tests/platform_access_test.py
+          python tests/ai_providers_test.py
+          python tests/online_mode_test.py
+          python tests/railway_production_test.py
+
+  docker-smoke:
+    name: Docker e healthcheck
+    runs-on: ubuntu-latest
+    needs: python-tests
+    steps:
+      - name: Baixar código
+        uses: actions/checkout@v4
+
+      - name: Construir imagem
+        run: docker build -t onecrm-ci:latest .
+
+      - name: Iniciar imagem como Railway
+        run: |
+          docker volume create onecrm-ci-data
+          docker run -d --name onecrm-ci \
+            -p 18000:8000 \
+            -e PORT=8000 \
+            -e RAILWAY_ENVIRONMENT=production \
+            -e RAILWAY_VOLUME_MOUNT_PATH=/app/data \
+            -e ONE_CRM_SETUP_TOKEN=ci_token_abcdefghijklmnopqrstuvwxyz_0123456789 \
+            -e ONE_CRM_REQUIRE_SETUP_TOKEN=1 \
+            -e ONE_CRM_REQUIRE_PERSISTENT_STORAGE=1 \
+            -e ONE_CRM_SECURE_COOKIES=1 \
+            -e ONE_CRM_TRUST_PROXY_HEADERS=1 \
+            -v onecrm-ci-data:/app/data \
+            onecrm-ci:latest
+
+      - name: Verificar healthcheck
+        run: |
+          trap 'docker logs onecrm-ci; docker rm -f onecrm-ci; docker volume rm onecrm-ci-data' EXIT
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:18000/api/health | grep -q '"ok": true'; then
+              exit 0
+            fi
+            sleep 1
+          done
+          exit 1

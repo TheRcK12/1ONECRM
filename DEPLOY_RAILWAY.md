@@ -1,76 +1,108 @@
-# Publicar o ONE CRM no Railway
+# Deploy do ONE CRM 2.5 no Railway
 
-Esta pasta já está preparada para deploy com Dockerfile, porta dinâmica, healthcheck e armazenamento persistente em Volume.
+Este pacote foi preparado para o serviço existente do ONE CRM e preserva o banco SQLite armazenado no Volume.
 
-## 1. Colocar no GitHub
+## 1. Antes do commit
 
-1. Crie um repositório vazio no GitHub, por exemplo `one-crm-online`.
-2. Envie **o conteúdo desta pasta** para a raiz do repositório.
-3. Confirme que `Dockerfile`, `railway.json` e `one_crm_server.py` aparecem na raiz.
+1. Crie um backup pelo ONE CRM.
+2. Não remova, recrie nem limpe o Volume atual.
+3. Confirme que o Volume está montado em `/app/data`.
+4. Copie os arquivos do pacote para a raiz do repositório e faça o commit.
 
-## 2. Criar o projeto no Railway
+Os arquivos `Dockerfile`, `railway.json`, `one_crm_server.py` e `railway_entrypoint.py` precisam ficar na raiz.
 
-1. Entre no Railway.
-2. Clique em **New Project**.
-3. Escolha **Deploy from GitHub repo**.
-4. Selecione o repositório do ONE CRM.
-5. Aguarde o primeiro build.
+## 2. Volume obrigatório
 
-O aplicativo detecta automaticamente a variável `PORT` do Railway e escuta em `0.0.0.0`.
-
-## 3. Criar um Volume antes de cadastrar usuários
-
-Sem Volume, o site abre, mas o banco pode desaparecer em um novo deploy.
-
-1. Abra o serviço do ONE CRM no projeto.
-2. Adicione um **Volume**.
-3. Use o caminho de montagem:
+No serviço do ONE CRM, abra **Settings → Volumes** e use:
 
 ```text
 /app/data
 ```
 
-O ONE CRM detecta automaticamente `RAILWAY_VOLUME_MOUNT_PATH` e grava no Volume:
+O Railway cria automaticamente `RAILWAY_VOLUME_MOUNT_PATH`. Não cadastre essa variável manualmente.
 
-- `one_crm.db`
-- backups
-- logs
-
-Depois de anexar o Volume, faça um novo deploy se o Railway não reiniciar o serviço automaticamente.
-
-## 4. Proteger a configuração inicial
-
-Na aba **Variables** do serviço, crie:
+O ONE CRM grava no Volume:
 
 ```text
-ONE_CRM_SETUP_TOKEN=um-token-longo-que-so-voce-conhece
+/app/data/one_crm.db
+/app/data/backups/
+/app/data/logs/
 ```
 
-Exemplo de token adequado:
+A versão 2.5 recusa a inicialização sem Volume, evitando perda silenciosa dos dados.
 
-```text
-onecrm-setup-7f9c4a21-2026-seguro
-```
+## 3. Variáveis obrigatórias
 
-Na primeira abertura, a tela solicitará esse token antes de criar o primeiro Dono. Depois que o Dono existir, o token deixa de ser usado pelo fluxo normal.
+Abra **Variables → Raw Editor** no serviço do ONE CRM e confira:
 
-Variáveis recomendadas:
-
-```text
+```env
+ONE_CRM_SETUP_TOKEN=COLOQUE_UM_TOKEN_ALEATORIO_COM_PELO_MENOS_32_CARACTERES
+ONE_CRM_REQUIRE_SETUP_TOKEN=1
+ONE_CRM_REQUIRE_PERSISTENT_STORAGE=1
 ONE_CRM_SECURE_COOKIES=1
 ONE_CRM_TRUST_PROXY_HEADERS=1
+ONE_CRM_SESSION_HOURS=12
+ONE_CRM_AUTOMATIC_DAILY_BACKUP=1
+ONE_CRM_BACKUP_RETENTION=14
 ```
 
-O Railway já define `PORT`; não crie essa variável manualmente.
+Para gerar o token localmente:
 
-## 5. Gerar o domínio público
+```bash
+python GERAR_TOKEN_RAILWAY.py
+```
 
-1. Abra **Settings** do serviço.
-2. Vá até **Networking** ou **Public Networking**.
-3. Clique em **Generate Domain**.
-4. Abra o endereço fornecido pelo Railway.
+Não adicione `PORT`. O Railway fornece essa variável automaticamente.
 
-Teste também:
+Não adicione `RAILWAY_VOLUME_MOUNT_PATH`. Ela é fornecida quando o Volume está anexado.
+
+## 4. ONE Intelligence
+
+Para GroqCloud:
+
+```env
+ONE_CRM_AI_PROVIDER=groq
+ONE_CRM_AI_ENABLED=1
+ONE_CRM_AI_LOCAL_FALLBACK=1
+GROQ_API_KEY=SUA_CHAVE_REAL
+GROQ_MODEL=llama-3.1-8b-instant
+ONE_CRM_AI_RATE_LIMIT=10
+ONE_CRM_AI_RATE_WINDOW_SECONDS=60
+ONE_CRM_AI_TIMEOUT=35
+```
+
+Não coloque a chave no GitHub.
+
+## 5. Configurações do serviço
+
+O arquivo `railway.json` já define:
+
+- builder por Dockerfile;
+- healthcheck `/api/health`;
+- timeout de 180 segundos;
+- reinício em falha;
+- até 10 tentativas;
+- 20 segundos para encerramento gradual;
+- nenhuma sobreposição entre deploys, pois o serviço usa Volume.
+
+Em **Settings → Deploy**, remova um Custom Start Command antigo caso esteja preenchido. A imagem deve iniciar pelo `ENTRYPOINT` e `CMD` do Dockerfile.
+
+Se existir uma variável `RAILWAY_RUN_UID`, remova-a ou mantenha `0`. O entrypoint precisa iniciar brevemente como root para ajustar a permissão do Volume e, logo depois, reduz o processo para o UID 10001. Não defina `RAILWAY_RUN_UID=10001`.
+
+Mantenha:
+
+```text
+Replicas: 1
+Regiões: 1
+```
+
+SQLite em Volume não deve ser compartilhado entre réplicas.
+
+## 6. Domínio e healthcheck
+
+Em **Settings → Networking**, mantenha ou gere o domínio público.
+
+Depois do deploy, abra:
 
 ```text
 https://SEU-DOMINIO/api/health
@@ -82,62 +114,69 @@ A resposta esperada contém:
 {
   "ok": true,
   "database": "ok",
-  "persistent_storage": true
+  "persistent_storage": true,
+  "storage": {
+    "persistent": true,
+    "writable": true
+  }
 }
 ```
 
-Se `persistent_storage` vier como `false`, o Volume não foi reconhecido.
+Se retornar `503`, verifique primeiro o Volume e as variáveis obrigatórias.
 
-## 6. Criar o primeiro Dono
+## 7. Domínio personalizado
 
-Abra o domínio público, informe:
+O frontend e o backend normalmente usam o mesmo domínio, portanto nenhuma variável adicional é necessária.
 
-- Nome completo
-- E-mail
-- Token de configuração
-- Senha
+Use `ONE_CRM_ALLOWED_ORIGINS` apenas se uma interface separada, hospedada em outro domínio, precisar enviar requisições ao CRM:
 
-Crie a conta imediatamente após o deploy. Não compartilhe o token.
-
-## Atualizações futuras
-
-Cada `push` no repositório dispara um novo deploy. O código muda, mas o banco continua no Volume.
-
-Não coloque estes arquivos no GitHub:
-
-- bancos `.db`
-- backups reais
-- logs
-- tokens e chaves de API
-
-## Importar um banco local já existente
-
-O arquivo local normalmente está em:
-
-```text
-%LOCALAPPDATA%\ONE_CRM\one_crm.db
+```env
+ONE_CRM_ALLOWED_ORIGINS=https://painel.exemplo.com.br
 ```
 
-Pare o serviço antes de substituir o banco. Depois, envie o arquivo para o Volume como:
+Separe múltiplos domínios por vírgula.
 
-```text
-/app/data/one_crm.db
-```
+## 8. Backups do Railway
 
-Você pode usar a navegação de arquivos do Volume pelo Railway CLI. Mantenha uma cópia do banco local antes de substituir qualquer arquivo.
+Além dos backups internos do ONE CRM, habilite backups do Volume no Railway. O banco e os backups internos ficam no mesmo Volume; uma cópia gerenciada pelo Railway protege contra exclusão ou corrupção do próprio Volume.
 
-## Limitação desta versão
+## 9. GitHub Actions
 
-Esta edição usa SQLite e deve operar com **uma única réplica** do serviço. Não habilite várias réplicas ou várias regiões usando o mesmo banco. Para produção maior, o próximo passo correto é migrar o banco para PostgreSQL.
+Após o commit, a aba **Actions** executará:
 
-## OpenAI / ONE Intelligence
+- compilação Python;
+- testes funcionais em Python 3.11, 3.12 e 3.13;
+- construção da imagem Docker;
+- inicialização com Volume simulado;
+- verificação do healthcheck;
+- CodeQL.
 
-Adicione em **Variables** do serviço:
+A publicação em produção deve ocorrer somente depois de os testes ficarem verdes.
 
-```text
-OPENAI_API_KEY=sk-proj-...
-OPENAI_MODEL=gpt-5.6-luna
-ONE_CRM_AI_ENABLED=1
-```
+## 10. Atualização de um serviço já existente
 
-A chave não deve ser enviada para o GitHub. Depois de aplicar as variáveis, aguarde o novo deploy e use **Administrativo → Integrações → Testar OpenAI**.
+1. Copie os arquivos para o repositório.
+2. Faça `Commit to main` e `Push origin`.
+3. Confira as variáveis.
+4. Confirme o Volume em `/app/data`.
+5. Aguarde o build e o healthcheck.
+6. Abra `/api/health`.
+7. Atualize o navegador com `Ctrl + F5`.
+
+## Diagnóstico rápido
+
+### Erro: nenhum Volume foi detectado
+
+Anexe o Volume ao serviço em `/app/data`. Não contorne com `ONE_CRM_ALLOW_EPHEMERAL_STORAGE=1` em produção.
+
+### Erro: `ONE_CRM_SETUP_TOKEN`
+
+Defina um token com pelo menos 32 caracteres. Ele protege a criação do primeiro Dono quando o banco estiver vazio.
+
+### Erro de permissão em `/app/data`
+
+A versão 2.5 corrige automaticamente a propriedade do Volume e executa o servidor como UID 10001. Remova qualquer Custom Start Command antigo que esteja ignorando o entrypoint.
+
+### Healthcheck 503
+
+Verifique os logs do deploy. O endpoint testa o banco e a capacidade de escrita no Volume.
