@@ -40,7 +40,7 @@ from one_crm_ai import (
 )
 
 APP_NAME = "ONE CRM"
-APP_VERSION = "2.6.0-beta.1"
+APP_VERSION = "2.6.1-beta.1"
 BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
 
@@ -2857,7 +2857,7 @@ class OneCRMHandler(BaseHTTPRequestHandler):
         self.send_json(200, {"ok": True, "logs": [dict(r) for r in rows]})
 
     def api_backups_list(self) -> None:
-        user = self.require_permission("backups.manage")
+        self.require_platform_owner()
         files = []
         for path in sorted(BACKUP_DIR.glob("*_*.db"), reverse=True):
             stat = path.stat()
@@ -2866,10 +2866,9 @@ class OneCRMHandler(BaseHTTPRequestHandler):
         self.send_json(200, {"ok": True, "backups": files})
 
     def api_backup_create(self, actor: dict[str, Any]) -> None:
-        if not has_permission(actor, "backups.manage"):
-            raise ApiError(403, "Sem permissão para criar backup.")
+        owner = self.require_platform_owner()
         path = create_backup("manual")
-        audit(actor["id"], "backup.create", "backup", path.name, {}, self.client_ip())
+        audit(owner["id"], "backup.create", "backup", path.name, {}, self.client_ip())
         self.send_json(201, {"ok": True, "name": path.name, "message": "Backup criado."})
 
     INTEGRATION_KEYS = {

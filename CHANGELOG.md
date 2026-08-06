@@ -1,3 +1,11 @@
+# 2.6.1-beta.1
+
+- Restaura a aba **Backups** no menu Administrativo do Dono da Plataforma.
+- Backups deixam de depender dos módulos habilitados no preset ativo.
+- A rota `#/backups` redireciona usuários sem acesso global.
+- As APIs de listar e criar backups agora exigem Dono da Plataforma no backend.
+- A página passa a identificar o backup como recurso global da plataforma.
+
 # 2.6.0-beta.1
 
 - Convites e recuperação de senha por e-mail, com tokens expirados e uso único.

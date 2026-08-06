@@ -71,7 +71,7 @@ const activePreset = () => activeProfile().preset || {};
 const activeModules = () => new Set(activeProfile().modules || []);
 const routeModuleMap = {dashboard:'dashboard',sales:'sales','new-sale':'sales',bko:'bko',daily:'daily',powerbi:'powerbi',ranking:'ranking',intelligence:'intelligence',users:'users',teams:'teams',plans:'plans',catalogs:'catalogs',roles:'roles',audit:'audit',backups:'backups',integrations:'integrations',cash:'cash','profile-settings':'users'};
 const moduleEnabled = route => {
-  if (route === 'profiles' || route === 'platform-access') return isPlatformOwner();
+  if (['profiles', 'platform-access', 'backups'].includes(route)) return isPlatformOwner();
   if (route === 'work-center') return true;
   if (route === 'plans') return activeModules().has('plans') || activeModules().has('services_catalog');
   return activeModules().has(routeModuleMap[route] || route);
@@ -346,7 +346,7 @@ const administrativeNavigationItems = [
   {id:'catalogs',label:'Catálogos',icon:'⚙',test:()=>has('catalogs.view')||has('catalogs.manage')},
   {id:'roles',label:'Cargos e permissões',icon:'⌘',test:()=>has('roles.view')||has('roles.manage')},
   {id:'audit',label:'Auditoria',icon:'◷',permission:'audit.view'},
-  {id:'backups',label:'Backups',icon:'⇩',permission:'backups.manage'},
+  {id:'backups',label:'Backups',icon:'⇩',test:()=>isPlatformOwner()},
   {id:'integrations',label:'Integrações',icon:'⌁',test:()=>has('integrations.view')||has('integrations.manage')},
 ];
 
@@ -1856,10 +1856,11 @@ async function renderAudit() {
 }
 
 async function renderBackups() {
-  setPage('Backups','PROTEÇÃO DO BANCO');
+  if (!isPlatformOwner()) return navigate('dashboard');
+  setPage('Backups','PROTEÇÃO GLOBAL DO BANCO');
   const data=await api('/api/backups');
   $('#content').innerHTML=`
-    <div class="page-head"><div><h1>Backups locais</h1><p class="muted">O sistema cria um backup diário ao iniciar e permite cópias manuais.</p></div><button class="btn primary" id="create-backup">Criar backup agora</button></div>
+    <div class="page-head"><div><h1>Backups da plataforma</h1><p class="muted">Área global exclusiva do Dono. O sistema cria um backup diário ao iniciar e permite cópias manuais.</p></div><button class="btn primary" id="create-backup">Criar backup agora</button></div>
     <section class="panel"><div class="table-wrap"><table class="data-table"><thead><tr><th>Arquivo</th><th>Tamanho</th><th>Modificado em</th></tr></thead><tbody>${data.backups.map(b=>`<tr><td class="code">${esc(b.name)}</td><td>${(b.size/1024).toFixed(1)} KB</td><td>${fmtDateTime(b.modified_at)}</td></tr>`).join('')}</tbody></table></div>${!data.backups.length?'<div class="empty">Nenhum backup encontrado.</div>':''}</section>
     <section class="panel"><div class="panel-body"><strong>Local dos arquivos:</strong><p class="code">Windows: %LOCALAPPDATA%\ONE_CRM\backups (ou a pasta de dados da versão anterior)</p><p class="muted">A restauração é feita pelo utilitário RESTAURAR_BACKUP.bat com o servidor fechado, porque substituir um banco em uso é uma forma bastante eficiente de fabricar corrupção.</p></div></section>`;
   $('#create-backup').addEventListener('click',async()=>{try{const r=await api('/api/backups',{method:'POST',body:{}});toast(r.message);renderBackups();}catch(error){toast(error.message,'error');}});
