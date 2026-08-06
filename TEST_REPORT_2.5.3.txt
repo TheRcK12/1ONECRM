@@ -1,0 +1,17 @@
+ONE CRM 2.5.3-beta.1 — RELATÓRIO DE TESTES
+
+Correção validada:
+- timestamps históricos sem fuso tratados como UTC;
+- exibição fixada em America/Sao_Paulo;
+- 2026-08-06T14:03:24 UTC -> 06/08/2026, 11:03:24 Brasília;
+- 2026-08-06T01:27:50 UTC -> 05/08/2026, 22:27:50 Brasília.
+
+Testes executados:
+- Python compileall: OK
+- TIMEZONE BRASILIA TEST: OK
+- JavaScript syntax check: OK
+- JAVASCRIPT BRASILIA FORMAT TEST: OK
+- FRONTEND MODAL/CSP TEST: OK
+- RAILWAY PRODUCTION TEST: OK
+
+A correção não altera nem migra registros do banco.

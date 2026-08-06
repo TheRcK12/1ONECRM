@@ -1,3 +1,11 @@
+# 2.5.3-beta.1
+
+- Corrige horários de acesso exibidos três horas no futuro.
+- Datas e horas armazenadas em UTC passam a ser interpretadas corretamente no navegador.
+- A apresentação é fixada no fuso `America/Sao_Paulo` (horário de Brasília).
+- Registros históricos sem indicador de fuso permanecem compatíveis e passam a aparecer corretamente.
+- A correção central também alcança auditoria e outras telas que utilizam `fmtDateTime`.
+
 # 2.5.2-beta.1
 
 - Corrige modais e gavetas que fechavam ao clicar em inputs, selects, checkboxes ou áreas internas.

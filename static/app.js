@@ -35,11 +35,31 @@ const fmtDate = value => {
   const [y,m,d] = raw.split('-');
   return y && m && d ? `${d}/${m}/${y}` : value;
 };
+const BRASILIA_TIME_ZONE = 'America/Sao_Paulo';
 const fmtDateTime = value => {
   if (!value) return '-';
-  const date = new Date(String(value).replace('Z',''));
+  const raw = String(value).trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return fmtDate(raw);
+
+  // O Railway grava os horários históricos em UTC sem informar o fuso.
+  // Valores novos que já tragam Z ou offset continuam sendo respeitados.
+  const isoLike = raw.replace(/^(\d{4}-\d{2}-\d{2})\s+/, '$1T');
+  const normalized = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(isoLike)
+    ? isoLike
+    : `${isoLike}Z`;
+  const date = new Date(normalized);
   if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString('pt-BR');
+
+  return new Intl.DateTimeFormat('pt-BR', {
+    timeZone: BRASILIA_TIME_ZONE,
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  }).format(date);
 };
 const initials = name => String(name || 'OC').split(/\s+/).slice(0,2).map(x=>x[0]).join('').toUpperCase();
 const has = permission => state.user?.is_platform_owner || baseRole(state.user) === 'owner' || state.user?.permissions?.includes(permission);

@@ -1,6 +1,6 @@
 {
   "name": "ONE CRM",
-  "version": "2.5.2-beta.1",
+  "version": "2.5.3-beta.1",
   "channel": "beta-online",
-  "description": "Corrige fechamento involuntário de modais e remove eventos JavaScript inline incompatíveis com a política CSP."
+  "description": "Corrige a interpretação de horários UTC e exibe acessos, auditorias e demais registros no horário de Brasília."
 }
