@@ -40,7 +40,7 @@ from one_crm_ai import (
 )
 
 APP_NAME = "ONE CRM"
-APP_VERSION = "2.5.3-beta.1"
+APP_VERSION = "2.6.0-beta.1"
 BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
 
@@ -3142,6 +3142,8 @@ def main() -> None:
 # Camada multi-perfil instalada após a definição completa do servidor.
 from one_crm_profiles import install_profiles
 install_profiles(globals())
+from one_crm_productivity import install_productivity
+install_productivity(globals())
 
 if __name__ == "__main__":
     main()

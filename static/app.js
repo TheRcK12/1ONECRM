@@ -72,6 +72,7 @@ const activeModules = () => new Set(activeProfile().modules || []);
 const routeModuleMap = {dashboard:'dashboard',sales:'sales','new-sale':'sales',bko:'bko',daily:'daily',powerbi:'powerbi',ranking:'ranking',intelligence:'intelligence',users:'users',teams:'teams',plans:'plans',catalogs:'catalogs',roles:'roles',audit:'audit',backups:'backups',integrations:'integrations',cash:'cash','profile-settings':'users'};
 const moduleEnabled = route => {
   if (route === 'profiles' || route === 'platform-access') return isPlatformOwner();
+  if (route === 'work-center') return true;
   if (route === 'plans') return activeModules().has('plans') || activeModules().has('services_catalog');
   return activeModules().has(routeModuleMap[route] || route);
 };
@@ -333,6 +334,10 @@ const financeNavigationItems = [
   {id:'accounts_receivable',label:'Contas a receber',icon:'↑',test:()=>has('accounts_receivable.view')||has('accounts_receivable.manage')},
 ];
 
+const productivityNavigationItems = [
+  {id:'work-center',label:'Central de produtividade',icon:'✓',test:()=>has('tasks.view')||has('tasks.manage')||has('reports.manage')},
+];
+
 const administrativeNavigationItems = [
   {id:'profile-settings',label:'Perfil atual',icon:'◈',test:()=>isPlatformOwner()||has('profile.view')},
   {id:'users',label:'Funcionários',icon:'♙',permission:'users.view'},
@@ -356,6 +361,7 @@ const navigationItems = [
   {id:'powerbi',label:'Power BI',icon:'▥',permission:'powerbi.view'},
   {id:'ranking',label:'Ranking',icon:'◇',test:()=>has('ranking.own')||has('ranking.all')},
   {id:'intelligence',label:'Inteligência',icon:'✦',permission:'intelligence.view'},
+  {id:'productivity-group',label:'Produtividade',icon:'✓',children:productivityNavigationItems},
   {id:'administrative-group',label:'Administrativo',icon:'⚙',children:administrativeNavigationItems},
 ];
 
@@ -499,6 +505,7 @@ async function renderRoute() {
       integrations: renderIntegrations,
       'profile-settings': renderProfileSettings,
       account: renderAccount,
+      'work-center': renderWorkCenter,
     };
     if (genericOperationIds.includes(route) || ['accounts_payable','accounts_receivable'].includes(route)) {
       return renderProfileRecords(route, params);
@@ -641,6 +648,11 @@ $('#login-form').addEventListener('submit', async event => {
     showApp();
   } catch(error) { toast(error.message,'error'); }
   finally { button.disabled = false; }
+});
+
+$('#forgot-password-btn')?.addEventListener('click',()=>{
+  modal('Recuperar senha',`<form id="password-request-form" class="form-grid"><label class="full">E-mail<input name="email" type="email" required></label><div class="full form-actions"><button class="btn" type="button" data-close-modal>Cancelar</button><button class="btn primary" type="submit">Enviar instruções</button></div></form>`);
+  $('#password-request-form').addEventListener('submit',async e=>{e.preventDefault();try{const r=await api('/api/password/request',{method:'POST',body:formObject(e.currentTarget)});closeModal();toast(r.message);}catch(error){toast(error.message,'error');}});
 });
 
 $('#logout-btn').addEventListener('click', async () => {
@@ -1958,3 +1970,52 @@ async function renderAccount() {
 
 Object.assign(window,{navigate,openSaleDetail,openUserForm,openTeamForm,openPlanForm,openCatalogForm,openRoleForm,saveRole,renderRoute});
 boot();
+
+// ------------------------- ONE CRM 2.6 · produtividade -------------------------
+async function renderWorkCenter() {
+  setPage('Central de produtividade','OPERAÇÃO');
+  const [taskData,notificationData,automationData,formData,dashboardData,alertData] = await Promise.all([
+    api('/api/tasks').catch(()=>({tasks:[]})),
+    api('/api/notifications').catch(()=>({notifications:[],unread:0})),
+    has('automations.manage') ? api('/api/automations').catch(()=>({rules:[]})) : Promise.resolve({rules:[]}),
+    has('forms.manage') ? api('/api/custom-forms').catch(()=>({forms:[]})) : Promise.resolve({forms:[]}),
+    has('reports.manage') ? api('/api/custom-dashboards').catch(()=>({dashboards:[]})) : Promise.resolve({dashboards:[]}),
+    has('security.alerts') ? api('/api/security-alerts').catch(()=>({alerts:[]})) : Promise.resolve({alerts:[]}),
+  ]);
+  $('#content').innerHTML = `
+    <div class="page-actions"><div><h2>Trabalho, automações e alertas</h2><p class="muted">Tarefas, notificações, formulários e relatórios do perfil atual.</p></div>${has('tasks.manage')?'<button class="btn primary" id="new-productivity-task">+ Nova tarefa</button>':''}</div>
+    <div class="metric-grid"><article class="metric"><span>Tarefas abertas</span><strong>${taskData.tasks.filter(x=>x.status!=='done').length}</strong></article><article class="metric"><span>Notificações não lidas</span><strong>${notificationData.unread||0}</strong></article><article class="metric"><span>Automações ativas</span><strong>${automationData.rules.filter(x=>x.active).length}</strong></article><article class="metric"><span>Alertas de segurança</span><strong>${alertData.alerts.filter(x=>!x.resolved_at).length}</strong></article></div>
+    <div class="profile-grid">
+      <section class="panel"><div class="panel-head"><h3>Tarefas</h3></div><div class="table-wrap"><table><thead><tr><th>Tarefa</th><th>Responsável</th><th>Prazo</th><th>Status</th></tr></thead><tbody>${taskData.tasks.map(t=>`<tr><td><strong>${esc(t.title)}</strong><small class="block muted">${esc(t.description||'')}</small></td><td>${esc(t.assigned_name||'-')}</td><td>${fmtDateTime(t.due_at)}</td><td>${badge(t.overdue?'Atrasada':t.status,t.overdue?'vencida':t.status)}</td></tr>`).join('')||'<tr><td colspan="4" class="muted">Nenhuma tarefa cadastrada.</td></tr>'}</tbody></table></div></section>
+      <section class="panel"><div class="panel-head"><h3>Notificações</h3></div><div class="stack-list">${notificationData.notifications.slice(0,15).map(n=>`<article class="list-card"><strong>${esc(n.title)}</strong><p>${esc(n.message)}</p><small>${fmtDateTime(n.created_at)} ${n.read_at?'· lida':'· não lida'}</small></article>`).join('')||'<div class="empty">Nenhuma notificação.</div>'}</div></section>
+    </div>
+    <div class="profile-grid">
+      <section class="panel"><div class="panel-head"><h3>Automações</h3>${has('automations.manage')?'<button class="btn" id="new-automation">Nova regra</button>':''}</div><div class="stack-list">${automationData.rules.map(r=>`<article class="list-card"><strong>${esc(r.name)}</strong><p>Gatilho: ${esc(r.trigger_event)}</p><small>${r.active?'Ativa':'Inativa'}${r.last_run_at?' · última execução '+fmtDateTime(r.last_run_at):''}</small></article>`).join('')||'<div class="empty">Nenhuma automação.</div>'}</div></section>
+      <section class="panel"><div class="panel-head"><h3>Formulários personalizados</h3>${has('forms.manage')?'<button class="btn" id="new-custom-form">Novo formulário</button>':''}</div><div class="stack-list">${formData.forms.map(f=>`<article class="list-card"><strong>${esc(f.name)}</strong><p>${esc(f.description||'Sem descrição')}</p><small>${f.schema.length} campo(s)</small></article>`).join('')||'<div class="empty">Nenhum formulário personalizado.</div>'}</div></section>
+    </div>
+    <div class="profile-grid">
+      <section class="panel"><div class="panel-head"><h3>Dashboards personalizados</h3>${has('reports.manage')?'<button class="btn" id="new-dashboard-view">Nova visão</button>':''}</div><div class="stack-list">${dashboardData.dashboards.map(d=>`<article class="list-card"><strong>${esc(d.name)}</strong><p>${d.is_default?'Visão padrão':'Visão personalizada'}</p></article>`).join('')||'<div class="empty">Nenhuma visão personalizada.</div>'}</div></section>
+      <section class="panel"><div class="panel-head"><h3>Alertas de segurança</h3></div><div class="stack-list">${alertData.alerts.slice(0,15).map(a=>`<article class="list-card"><strong>${esc(a.title)}</strong><p>${esc(a.alert_type)} · ${esc(a.severity)}</p><small>${fmtDateTime(a.created_at)}</small></article>`).join('')||'<div class="empty">Nenhum alerta de segurança.</div>'}</div></section>
+    </div>`;
+  $('#new-productivity-task')?.addEventListener('click',openProductivityTaskForm);
+  $('#new-automation')?.addEventListener('click',openAutomationForm);
+  $('#new-custom-form')?.addEventListener('click',openCustomFormBuilder);
+  $('#new-dashboard-view')?.addEventListener('click',openDashboardViewForm);
+}
+
+function openProductivityTaskForm(){
+  modal('Nova tarefa',`<form id="productivity-task-form" class="form-grid"><label class="full">Título<input name="title" required></label><label class="full">Descrição<textarea name="description"></textarea></label><label>Prioridade<select name="priority"><option value="low">Baixa</option><option value="normal" selected>Normal</option><option value="high">Alta</option><option value="urgent">Urgente</option></select></label><label>Prazo<input name="due_at" type="datetime-local"></label><div class="full form-actions"><button class="btn" type="button" data-close-modal>Cancelar</button><button class="btn primary" type="submit">Criar tarefa</button></div></form>`,{wide:true});
+  $('#productivity-task-form').addEventListener('submit',async e=>{e.preventDefault();try{await api('/api/tasks',{method:'POST',body:formObject(e.currentTarget)});closeModal();toast('Tarefa criada.');renderWorkCenter();}catch(error){toast(error.message,'error');}});
+}
+function openAutomationForm(){
+  modal('Nova automação',`<form id="automation-form" class="form-grid"><label>Nome<input name="name" required></label><label>Gatilho<select name="trigger_event"><option value="task.created">Tarefa criada</option><option value="task.updated">Tarefa atualizada</option><option value="form.submitted">Formulário enviado</option></select></label><label class="full">Condições (JSON)<textarea name="conditions">{}</textarea></label><label class="full">Ações (JSON)<textarea name="actions">[{"type":"notify","user_id":1,"title":"Automação","message":"Uma condição foi atendida."}]</textarea></label><div class="full form-actions"><button class="btn" type="button" data-close-modal>Cancelar</button><button class="btn primary" type="submit">Salvar</button></div></form>`,{wide:true});
+  $('#automation-form').addEventListener('submit',async e=>{e.preventDefault();const d=formObject(e.currentTarget);try{d.conditions=JSON.parse(d.conditions||'{}');d.actions=JSON.parse(d.actions||'[]');d.active=true;await api('/api/automations',{method:'POST',body:d});closeModal();toast('Automação salva.');renderWorkCenter();}catch(error){toast(error.message,'error');}});
+}
+function openCustomFormBuilder(){
+  modal('Novo formulário',`<form id="custom-form-builder" class="form-grid"><label>Nome<input name="name" required></label><label>Código<input name="code" placeholder="ex.: vistoria_tecnica"></label><label class="full">Descrição<textarea name="description"></textarea></label><label class="full">Campos (JSON)<textarea name="schema">[{"key":"nome","label":"Nome","type":"text","required":true}]</textarea></label><div class="full form-actions"><button class="btn" type="button" data-close-modal>Cancelar</button><button class="btn primary" type="submit">Criar formulário</button></div></form>`,{wide:true});
+  $('#custom-form-builder').addEventListener('submit',async e=>{e.preventDefault();const d=formObject(e.currentTarget);try{d.schema=JSON.parse(d.schema||'[]');await api('/api/custom-forms',{method:'POST',body:d});closeModal();toast('Formulário criado.');renderWorkCenter();}catch(error){toast(error.message,'error');}});
+}
+function openDashboardViewForm(){
+  modal('Nova visão de dashboard',`<form id="dashboard-view-form" class="form-grid"><label class="full">Nome<input name="name" required></label><label class="full">Configuração dos widgets (JSON)<textarea name="config">{"widgets":["summary","tasks","notifications"]}</textarea></label><label class="check-item full"><input name="shared" type="checkbox"><span>Compartilhar com o perfil</span></label><label class="check-item full"><input name="is_default" type="checkbox"><span>Usar como padrão</span></label><div class="full form-actions"><button class="btn" type="button" data-close-modal>Cancelar</button><button class="btn primary" type="submit">Salvar visão</button></div></form>`,{wide:true});
+  $('#dashboard-view-form').addEventListener('submit',async e=>{e.preventDefault();const d=formObject(e.currentTarget);try{d.config=JSON.parse(d.config||'{}');await api('/api/custom-dashboards',{method:'POST',body:d});closeModal();toast('Visão salva.');renderWorkCenter();}catch(error){toast(error.message,'error');}});
+}

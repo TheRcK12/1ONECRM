@@ -1,6 +1,6 @@
 {
   "name": "ONE CRM",
-  "version": "2.5.3-beta.1",
+  "version": "2.6.0-beta.1",
   "channel": "beta-online",
-  "description": "Corrige a interpretação de horários UTC e exibe acessos, auditorias e demais registros no horário de Brasília."
+  "description": "Convites, recuperação de senha, tarefas, automações, formulários, anexos, auditoria avançada e dashboards personalizados."
 }

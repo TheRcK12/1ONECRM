@@ -1,3 +1,14 @@
+# 2.6.0-beta.1
+
+- Convites e recuperação de senha por e-mail, com tokens expirados e uso único.
+- Tarefas, notificações, prazos e central de produtividade.
+- Motor inicial de automações por eventos.
+- Formulários e campos personalizados por perfil.
+- Anexos isolados no Volume com hash SHA-256 e limite de tamanho.
+- Dashboards personalizados e alertas de segurança.
+- Guias de homologação, rollback e migração controlada para PostgreSQL.
+- Mantém SQLite em produção até a migração ser validada em homologação.
+
 # 2.5.3-beta.1
 
 - Corrige horários de acesso exibidos três horas no futuro.
