@@ -2,7 +2,7 @@ FROM python:3.11-slim-bookworm
 
 LABEL org.opencontainers.image.title="ONE CRM" \
       org.opencontainers.image.description="ONE CRM multi-perfil preparado para Railway" \
-      org.opencontainers.image.version="2.5.3-beta.1"
+      org.opencontainers.image.version="2.6.2-beta.1"
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -22,7 +22,7 @@ RUN groupadd --gid 10001 onecrm \
 COPY requirements.txt /app/requirements.txt
 RUN python -m pip install --no-cache-dir -r /app/requirements.txt
 
-COPY --chown=10001:10001 one_crm_server.py one_crm_ai.py one_crm_profiles.py railway_entrypoint.py /app/
+COPY --chown=10001:10001 one_crm_server.py one_crm_ai.py one_crm_profiles.py one_crm_productivity.py railway_entrypoint.py /app/
 COPY --chown=10001:10001 config.json version.json /app/
 COPY --chown=10001:10001 static /app/static
 

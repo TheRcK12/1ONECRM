@@ -251,7 +251,8 @@ function badge(label, code='') {
   const text = String(label || code || '-');
   const low = `${code} ${text}`.toLowerCase();
   let color = 'cyan';
-  if (/instalado|ativado|ok|conclu/.test(low)) color = 'green';
+  if (['green','amber','red','cyan','blue','violet'].includes(String(code).toLowerCase())) color = String(code).toLowerCase();
+  else if (/instalado|ativado|ok|conclu/.test(low)) color = 'green';
   else if (/cancel|não|nao|reprov|trash|sem sucesso/.test(low)) color = 'red';
   else if (/pendente|aguard|tratamento|prometeu|retorno|reagend/.test(low)) color = 'amber';
   else if (/bko|violet/.test(low)) color = 'violet';
@@ -587,7 +588,7 @@ function refreshUserUi() {
     const profile = activeProfile();
     switcher.classList.remove('hidden');
     if (state.profiles.length > 1) {
-      switcher.innerHTML = `<label><span>Perfil</span><select id="profile-select">${state.profiles.map(item=>`<option value="${item.id}" ${String(item.id)===String(profile.id)?'selected':''}>${esc(item.name)}</option>`).join('')}</select></label>`;
+      switcher.innerHTML = `<label class="profile-select-control"><span class="profile-select-caption">Perfil</span><select id="profile-select" aria-label="Perfil atual">${state.profiles.map(item=>`<option value="${item.id}" ${String(item.id)===String(profile.id)?'selected':''}>${esc(item.name)}</option>`).join('')}</select></label>`;
       $('#profile-select').addEventListener('change', async event => {
         const select = event.currentTarget;
         select.disabled = true;
@@ -1972,9 +1973,54 @@ async function renderAccount() {
 Object.assign(window,{navigate,openSaleDetail,openUserForm,openTeamForm,openPlanForm,openCatalogForm,openRoleForm,saveRole,renderRoute});
 boot();
 
-// ------------------------- ONE CRM 2.6 · produtividade -------------------------
+// ------------------------- ONE CRM 2.6.2 · produtividade e construtores visuais -------------------------
+const productivityTriggerLabels = {
+  'task.created':'Tarefa criada',
+  'task.updated':'Tarefa atualizada',
+  'form.submitted':'Formulário enviado',
+};
+const productivityPriorityLabels = {low:'Baixa',normal:'Normal',high:'Alta',urgent:'Urgente'};
+const productivityStatusLabels = {pending:'Pendente',done:'Concluída'};
+const dashboardWidgetCatalog = [
+  {code:'summary',label:'Resumo geral',description:'Indicadores principais do perfil.'},
+  {code:'tasks',label:'Tarefas',description:'Tarefas abertas, atrasadas e próximas do prazo.'},
+  {code:'notifications',label:'Notificações',description:'Avisos e movimentações recentes.'},
+  {code:'automations',label:'Automações',description:'Regras ativas e últimas execuções.'},
+  {code:'forms',label:'Formulários',description:'Formulários personalizados e volume de uso.'},
+  {code:'security',label:'Segurança',description:'Alertas de segurança ainda não resolvidos.'},
+];
+const customFieldTypes = [
+  ['text','Texto curto'],['textarea','Texto longo'],['number','Número'],['currency','Moeda'],
+  ['date','Data'],['datetime','Data e hora'],['email','E-mail'],['phone','Telefone'],
+  ['select','Lista de opções'],['checkbox','Sim / Não'],['user','Funcionário'],['file','Arquivo'],
+];
+
+function productivityTriggerLabel(value){ return productivityTriggerLabels[value] || value || '-'; }
+function productivityUsers(){
+  const map=new Map();
+  (state.users||[]).filter(user=>user.active!==0).forEach(user=>map.set(String(user.id),user));
+  if(state.user?.id&&!map.has(String(state.user.id))) map.set(String(state.user.id),{id:state.user.id,name:state.user.display_name||state.user.name,active:1});
+  return [...map.values()];
+}
+function productivityUserOptions(selected=''){
+  const users=productivityUsers();
+  return users.length
+    ? users.map(user=>`<option value="${user.id}" ${String(user.id)===String(selected)?'selected':''}>${esc(user.display_name||user.name||user.email||`Usuário ${user.id}`)}</option>`).join('')
+    : `<option value="${state.user?.id||''}">${esc(state.user?.display_name||state.user?.name||'Usuário atual')}</option>`;
+}
+async function ensureProductivityReferenceData(){
+  try{ await ensureReferenceData(); }catch(_error){}
+  if(!state.users?.length){
+    try{ const result=await api('/api/users'); state.users=result.users||[]; }catch(_error){}
+  }
+}
+function slugBuilderKey(value){
+  return String(value||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'').slice(0,50);
+}
+
 async function renderWorkCenter() {
   setPage('Central de produtividade','OPERAÇÃO');
+  await ensureProductivityReferenceData();
   const [taskData,notificationData,automationData,formData,dashboardData,alertData] = await Promise.all([
     api('/api/tasks').catch(()=>({tasks:[]})),
     api('/api/notifications').catch(()=>({notifications:[],unread:0})),
@@ -1983,40 +2029,179 @@ async function renderWorkCenter() {
     has('reports.manage') ? api('/api/custom-dashboards').catch(()=>({dashboards:[]})) : Promise.resolve({dashboards:[]}),
     has('security.alerts') ? api('/api/security-alerts').catch(()=>({alerts:[]})) : Promise.resolve({alerts:[]}),
   ]);
+  state.productivityAutomationRules=automationData.rules||[];
+  state.productivityForms=formData.forms||[];
+  state.productivityDashboards=dashboardData.dashboards||[];
+  const openTasks=(taskData.tasks||[]).filter(item=>item.status!=='done');
+  const overdueTasks=openTasks.filter(item=>item.overdue);
+  const activeAutomations=(automationData.rules||[]).filter(item=>item.active);
+  const openAlerts=(alertData.alerts||[]).filter(item=>!item.resolved_at);
   $('#content').innerHTML = `
-    <div class="page-actions"><div><h2>Trabalho, automações e alertas</h2><p class="muted">Tarefas, notificações, formulários e relatórios do perfil atual.</p></div>${has('tasks.manage')?'<button class="btn primary" id="new-productivity-task">+ Nova tarefa</button>':''}</div>
-    <div class="metric-grid"><article class="metric"><span>Tarefas abertas</span><strong>${taskData.tasks.filter(x=>x.status!=='done').length}</strong></article><article class="metric"><span>Notificações não lidas</span><strong>${notificationData.unread||0}</strong></article><article class="metric"><span>Automações ativas</span><strong>${automationData.rules.filter(x=>x.active).length}</strong></article><article class="metric"><span>Alertas de segurança</span><strong>${alertData.alerts.filter(x=>!x.resolved_at).length}</strong></article></div>
-    <div class="profile-grid">
-      <section class="panel"><div class="panel-head"><h3>Tarefas</h3></div><div class="table-wrap"><table><thead><tr><th>Tarefa</th><th>Responsável</th><th>Prazo</th><th>Status</th></tr></thead><tbody>${taskData.tasks.map(t=>`<tr><td><strong>${esc(t.title)}</strong><small class="block muted">${esc(t.description||'')}</small></td><td>${esc(t.assigned_name||'-')}</td><td>${fmtDateTime(t.due_at)}</td><td>${badge(t.overdue?'Atrasada':t.status,t.overdue?'vencida':t.status)}</td></tr>`).join('')||'<tr><td colspan="4" class="muted">Nenhuma tarefa cadastrada.</td></tr>'}</tbody></table></div></section>
-      <section class="panel"><div class="panel-head"><h3>Notificações</h3></div><div class="stack-list">${notificationData.notifications.slice(0,15).map(n=>`<article class="list-card"><strong>${esc(n.title)}</strong><p>${esc(n.message)}</p><small>${fmtDateTime(n.created_at)} ${n.read_at?'· lida':'· não lida'}</small></article>`).join('')||'<div class="empty">Nenhuma notificação.</div>'}</div></section>
+    <section class="work-center-hero">
+      <div><p class="eyebrow">PRODUTIVIDADE</p><h1>Trabalho, automações e alertas</h1><p>Organize tarefas, regras automáticas, formulários e visões do perfil <strong>${esc(activeProfile().name||'atual')}</strong>.</p></div>
+      <div class="work-center-actions">${has('tasks.manage')?'<button class="btn primary" id="new-productivity-task">＋ Nova tarefa</button>':''}${has('automations.manage')?'<button class="btn" id="hero-new-automation">＋ Automação</button>':''}</div>
+    </section>
+    <section class="work-metrics" aria-label="Resumo de produtividade">
+      <article class="work-metric"><span class="work-metric-icon">✓</span><div><small>Tarefas abertas</small><strong>${openTasks.length}</strong><em>${overdueTasks.length?`${overdueTasks.length} atrasada(s)`:'Nenhuma atrasada'}</em></div></article>
+      <article class="work-metric"><span class="work-metric-icon">◉</span><div><small>Não lidas</small><strong>${notificationData.unread||0}</strong><em>Notificações</em></div></article>
+      <article class="work-metric"><span class="work-metric-icon">↻</span><div><small>Automações</small><strong>${activeAutomations.length}</strong><em>Regras ativas</em></div></article>
+      <article class="work-metric"><span class="work-metric-icon">!</span><div><small>Segurança</small><strong>${openAlerts.length}</strong><em>Alertas abertos</em></div></article>
+    </section>
+    <div class="work-grid work-grid-primary">
+      <section class="panel work-panel work-panel-wide">
+        <header class="panel-head"><div><h3>Tarefas</h3><small class="muted">Prazos e responsáveis do perfil atual</small></div>${has('tasks.manage')?'<button class="btn small" id="panel-new-task">＋ Nova tarefa</button>':''}</header>
+        <div class="table-wrap"><table class="data-table work-table"><thead><tr><th>Tarefa</th><th>Responsável</th><th>Prazo</th><th>Status</th></tr></thead><tbody>${(taskData.tasks||[]).map(t=>`<tr><td><div class="cell-main">${esc(t.title)}</div>${t.description?`<div class="cell-sub">${esc(t.description)}</div>`:''}</td><td>${esc(t.assigned_name||'-')}</td><td>${fmtDateTime(t.due_at)}</td><td>${badge(t.overdue?'Atrasada':(productivityStatusLabels[t.status]||t.status),t.overdue?'red':t.status==='done'?'green':'cyan')}</td></tr>`).join('')||'<tr><td colspan="4"><div class="empty compact-empty">Nenhuma tarefa cadastrada.</div></td></tr>'}</tbody></table></div>
+      </section>
+      <section class="panel work-panel">
+        <header class="panel-head"><div><h3>Notificações</h3><small class="muted">Últimos avisos direcionados a você</small></div>${notificationData.unread?badge(`${notificationData.unread} nova(s)`,'cyan'):badge('Em dia','green')}</header>
+        <div class="stack-list work-list">${(notificationData.notifications||[]).slice(0,12).map(n=>`<article class="list-card work-list-card ${n.read_at?'':'unread'}"><div><strong>${esc(n.title)}</strong><p>${esc(n.message)}</p><small>${fmtDateTime(n.created_at)} · ${n.read_at?'Lida':'Não lida'}</small></div>${n.read_at?'':`<button class="btn small ghost" type="button" data-notification-read="${n.id}">Marcar como lida</button>`}</article>`).join('')||'<div class="empty compact-empty">Nenhuma notificação.</div>'}</div>
+      </section>
     </div>
-    <div class="profile-grid">
-      <section class="panel"><div class="panel-head"><h3>Automações</h3>${has('automations.manage')?'<button class="btn" id="new-automation">Nova regra</button>':''}</div><div class="stack-list">${automationData.rules.map(r=>`<article class="list-card"><strong>${esc(r.name)}</strong><p>Gatilho: ${esc(r.trigger_event)}</p><small>${r.active?'Ativa':'Inativa'}${r.last_run_at?' · última execução '+fmtDateTime(r.last_run_at):''}</small></article>`).join('')||'<div class="empty">Nenhuma automação.</div>'}</div></section>
-      <section class="panel"><div class="panel-head"><h3>Formulários personalizados</h3>${has('forms.manage')?'<button class="btn" id="new-custom-form">Novo formulário</button>':''}</div><div class="stack-list">${formData.forms.map(f=>`<article class="list-card"><strong>${esc(f.name)}</strong><p>${esc(f.description||'Sem descrição')}</p><small>${f.schema.length} campo(s)</small></article>`).join('')||'<div class="empty">Nenhum formulário personalizado.</div>'}</div></section>
-    </div>
-    <div class="profile-grid">
-      <section class="panel"><div class="panel-head"><h3>Dashboards personalizados</h3>${has('reports.manage')?'<button class="btn" id="new-dashboard-view">Nova visão</button>':''}</div><div class="stack-list">${dashboardData.dashboards.map(d=>`<article class="list-card"><strong>${esc(d.name)}</strong><p>${d.is_default?'Visão padrão':'Visão personalizada'}</p></article>`).join('')||'<div class="empty">Nenhuma visão personalizada.</div>'}</div></section>
-      <section class="panel"><div class="panel-head"><h3>Alertas de segurança</h3></div><div class="stack-list">${alertData.alerts.slice(0,15).map(a=>`<article class="list-card"><strong>${esc(a.title)}</strong><p>${esc(a.alert_type)} · ${esc(a.severity)}</p><small>${fmtDateTime(a.created_at)}</small></article>`).join('')||'<div class="empty">Nenhum alerta de segurança.</div>'}</div></section>
+    <div class="work-grid">
+      <section class="panel work-panel">
+        <header class="panel-head"><div><h3>Automações</h3><small class="muted">Regras que executam tarefas sozinhas</small></div>${has('automations.manage')?'<button class="btn small" id="new-automation">＋ Nova regra</button>':''}</header>
+        <div class="stack-list work-list">${(automationData.rules||[]).map(r=>`<article class="list-card work-list-card"><div><div class="work-card-title"><strong>${esc(r.name)}</strong>${r.active?badge('Ativa','green'):badge('Inativa','red')}</div><p>${esc(productivityTriggerLabel(r.trigger_event))} · ${(r.actions||[]).length} ação(ões)</p><small>${r.last_run_at?'Última execução '+fmtDateTime(r.last_run_at):'Ainda não executada'}</small></div>${has('automations.manage')?`<button class="btn small ghost" type="button" data-automation-edit="${r.id}">Editar</button>`:''}</article>`).join('')||'<div class="empty compact-empty">Nenhuma automação configurada.</div>'}</div>
+      </section>
+      <section class="panel work-panel">
+        <header class="panel-head"><div><h3>Formulários personalizados</h3><small class="muted">Campos criados sem editar código</small></div>${has('forms.manage')?'<button class="btn small" id="new-custom-form">＋ Novo formulário</button>':''}</header>
+        <div class="stack-list work-list">${(formData.forms||[]).map(f=>`<article class="list-card work-list-card"><div><div class="work-card-title"><strong>${esc(f.name)}</strong>${f.active?badge('Ativo','green'):badge('Inativo','red')}</div><p>${esc(f.description||'Sem descrição')}</p><small>${(f.schema||[]).length} campo(s)</small></div>${has('forms.manage')?`<button class="btn small ghost" type="button" data-custom-form-edit="${f.id}">Editar</button>`:''}</article>`).join('')||'<div class="empty compact-empty">Nenhum formulário personalizado.</div>'}</div>
+      </section>
+      <section class="panel work-panel">
+        <header class="panel-head"><div><h3>Dashboards personalizados</h3><small class="muted">Escolha os indicadores que cada visão mostra</small></div>${has('reports.manage')?'<button class="btn small" id="new-dashboard-view">＋ Nova visão</button>':''}</header>
+        <div class="stack-list work-list">${(dashboardData.dashboards||[]).map(d=>`<article class="list-card work-list-card"><div><div class="work-card-title"><strong>${esc(d.name)}</strong>${d.is_default?badge('Padrão','cyan'):''}</div><p>${d.owner_user_id?'Visão pessoal':'Compartilhada com o perfil'}</p><small>${(d.config?.widgets||[]).length} widget(s)</small></div>${has('reports.manage')?`<button class="btn small ghost" type="button" data-dashboard-edit="${d.id}">Editar</button>`:''}</article>`).join('')||'<div class="empty compact-empty">Nenhuma visão personalizada.</div>'}</div>
+      </section>
+      <section class="panel work-panel">
+        <header class="panel-head"><div><h3>Alertas de segurança</h3><small class="muted">Eventos que merecem revisão administrativa</small></div></header>
+        <div class="stack-list work-list">${(alertData.alerts||[]).slice(0,12).map(a=>`<article class="list-card work-list-card"><div><div class="work-card-title"><strong>${esc(a.title)}</strong>${badge(esc(a.severity||'info'),a.severity==='critical'||a.severity==='high'?'red':a.severity==='medium'?'amber':'cyan')}</div><p>${esc(a.alert_type)}</p><small>${fmtDateTime(a.created_at)}</small></div></article>`).join('')||'<div class="empty compact-empty">Nenhum alerta de segurança.</div>'}</div>
+      </section>
     </div>`;
-  $('#new-productivity-task')?.addEventListener('click',openProductivityTaskForm);
-  $('#new-automation')?.addEventListener('click',openAutomationForm);
-  $('#new-custom-form')?.addEventListener('click',openCustomFormBuilder);
-  $('#new-dashboard-view')?.addEventListener('click',openDashboardViewForm);
+  const newTask=()=>openProductivityTaskForm();
+  $('#new-productivity-task')?.addEventListener('click',newTask);
+  $('#panel-new-task')?.addEventListener('click',newTask);
+  $('#new-automation')?.addEventListener('click',()=>openAutomationForm());
+  $('#hero-new-automation')?.addEventListener('click',()=>openAutomationForm());
+  $('#new-custom-form')?.addEventListener('click',()=>openCustomFormBuilder());
+  $('#new-dashboard-view')?.addEventListener('click',()=>openDashboardViewForm());
+  $$('[data-notification-read]').forEach(button=>button.addEventListener('click',async()=>{try{await api(`/api/notifications/${button.dataset.notificationRead}`,{method:'PUT',body:{}});await renderWorkCenter();}catch(error){toast(error.message,'error');}}));
+  $$('[data-automation-edit]').forEach(button=>button.addEventListener('click',()=>openAutomationForm(Number(button.dataset.automationEdit))));
+  $$('[data-custom-form-edit]').forEach(button=>button.addEventListener('click',()=>openCustomFormBuilder(Number(button.dataset.customFormEdit))));
+  $$('[data-dashboard-edit]').forEach(button=>button.addEventListener('click',()=>openDashboardViewForm(Number(button.dataset.dashboardEdit))));
 }
 
-function openProductivityTaskForm(){
-  modal('Nova tarefa',`<form id="productivity-task-form" class="form-grid"><label class="full">Título<input name="title" required></label><label class="full">Descrição<textarea name="description"></textarea></label><label>Prioridade<select name="priority"><option value="low">Baixa</option><option value="normal" selected>Normal</option><option value="high">Alta</option><option value="urgent">Urgente</option></select></label><label>Prazo<input name="due_at" type="datetime-local"></label><div class="full form-actions"><button class="btn" type="button" data-close-modal>Cancelar</button><button class="btn primary" type="submit">Criar tarefa</button></div></form>`,{wide:true});
-  $('#productivity-task-form').addEventListener('submit',async e=>{e.preventDefault();try{await api('/api/tasks',{method:'POST',body:formObject(e.currentTarget)});closeModal();toast('Tarefa criada.');renderWorkCenter();}catch(error){toast(error.message,'error');}});
+async function openProductivityTaskForm(){
+  await ensureProductivityReferenceData();
+  modal('Nova tarefa',`<form id="productivity-task-form" class="builder-form">
+    <div class="builder-intro"><span class="builder-step">1</span><div><strong>O que precisa ser feito?</strong><small>Crie uma tarefa clara, escolha o responsável e defina o prazo.</small></div></div>
+    <div class="builder-grid"><label class="builder-span-2">Título<input name="title" required minlength="3" placeholder="Ex.: Confirmar instalação com o cliente"></label><label class="builder-span-2">Descrição<textarea name="description" rows="3" placeholder="Inclua informações úteis para quem receber a tarefa."></textarea></label><label>Responsável<select name="assigned_user_id">${productivityUserOptions(state.user?.id)}</select></label><label>Prioridade<select name="priority"><option value="low">Baixa</option><option value="normal" selected>Normal</option><option value="high">Alta</option><option value="urgent">Urgente</option></select></label><label class="builder-span-2">Prazo<input name="due_at" type="datetime-local"></label></div>
+    <div class="builder-footer"><button class="btn ghost" type="button" data-close-modal>Cancelar</button><button class="btn primary" type="submit">Criar tarefa</button></div>
+  </form>`,{wide:true});
+  $('#productivity-task-form').addEventListener('submit',async e=>{e.preventDefault();const data=formObject(e.currentTarget);data.assigned_user_id=Number(data.assigned_user_id||state.user?.id||0);try{await api('/api/tasks',{method:'POST',body:data});closeModal();toast('Tarefa criada.');renderWorkCenter();}catch(error){toast(error.message,'error');}});
 }
-function openAutomationForm(){
-  modal('Nova automação',`<form id="automation-form" class="form-grid"><label>Nome<input name="name" required></label><label>Gatilho<select name="trigger_event"><option value="task.created">Tarefa criada</option><option value="task.updated">Tarefa atualizada</option><option value="form.submitted">Formulário enviado</option></select></label><label class="full">Condições (JSON)<textarea name="conditions">{}</textarea></label><label class="full">Ações (JSON)<textarea name="actions">[{"type":"notify","user_id":1,"title":"Automação","message":"Uma condição foi atendida."}]</textarea></label><div class="full form-actions"><button class="btn" type="button" data-close-modal>Cancelar</button><button class="btn primary" type="submit">Salvar</button></div></form>`,{wide:true});
-  $('#automation-form').addEventListener('submit',async e=>{e.preventDefault();const d=formObject(e.currentTarget);try{d.conditions=JSON.parse(d.conditions||'{}');d.actions=JSON.parse(d.actions||'[]');d.active=true;await api('/api/automations',{method:'POST',body:d});closeModal();toast('Automação salva.');renderWorkCenter();}catch(error){toast(error.message,'error');}});
+
+function automationConditionEditor(trigger,conditions={}){
+  const key=Object.keys(conditions||{})[0]||'';
+  const enabled=Boolean(key);
+  let field=''; let options=''; let label='Condição';
+  if(trigger==='task.created'){
+    field='priority'; label='Prioridade da tarefa';
+    options=Object.entries(productivityPriorityLabels).map(([value,text])=>`<option value="${value}" ${String(conditions.priority)===value?'selected':''}>${text}</option>`).join('');
+  }else if(trigger==='task.updated'){
+    field='status'; label='Novo status da tarefa';
+    options=Object.entries(productivityStatusLabels).map(([value,text])=>`<option value="${value}" ${String(conditions.status)===value?'selected':''}>${text}</option>`).join('');
+  }else{
+    field='form_id'; label='Formulário';
+    options=(state.productivityForms||[]).map(form=>`<option value="${form.id}" ${String(conditions.form_id)===String(form.id)?'selected':''}>${esc(form.name)}</option>`).join('');
+    if(!options) options='<option value="">Nenhum formulário cadastrado</option>';
+  }
+  return `<div class="condition-editor" data-condition-field="${field}"><label>Quando executar<select name="condition_mode"><option value="always" ${enabled?'':'selected'}>Sempre que o gatilho acontecer</option><option value="filter" ${enabled?'selected':''}>Somente quando atender a uma condição</option></select></label><div class="condition-detail ${enabled?'':'hidden'}" data-condition-detail><label>${esc(label)}<select data-condition-value>${options}</select></label><small>A regra só será executada quando este valor for igual ao selecionado.</small></div></div>`;
 }
-function openCustomFormBuilder(){
-  modal('Novo formulário',`<form id="custom-form-builder" class="form-grid"><label>Nome<input name="name" required></label><label>Código<input name="code" placeholder="ex.: vistoria_tecnica"></label><label class="full">Descrição<textarea name="description"></textarea></label><label class="full">Campos (JSON)<textarea name="schema">[{"key":"nome","label":"Nome","type":"text","required":true}]</textarea></label><div class="full form-actions"><button class="btn" type="button" data-close-modal>Cancelar</button><button class="btn primary" type="submit">Criar formulário</button></div></form>`,{wide:true});
-  $('#custom-form-builder').addEventListener('submit',async e=>{e.preventDefault();const d=formObject(e.currentTarget);try{d.schema=JSON.parse(d.schema||'[]');await api('/api/custom-forms',{method:'POST',body:d});closeModal();toast('Formulário criado.');renderWorkCenter();}catch(error){toast(error.message,'error');}});
+function automationActionCard(action={},index=0){
+  const type=action.type||'notify';
+  const target=type==='task'?(action.assigned_user_id||state.user?.id):(action.user_id||state.user?.id);
+  return `<article class="builder-card automation-action-card" data-automation-action>
+    <header class="builder-card-head"><div><span class="builder-card-index">Ação ${index+1}</span><strong>O que o ONE CRM deve fazer?</strong></div><button type="button" class="icon-btn builder-remove" data-remove-action title="Remover ação">×</button></header>
+    <div class="builder-grid"><label>Tipo de ação<select data-action-type><option value="notify" ${type==='notify'?'selected':''}>Enviar notificação</option><option value="task" ${type==='task'?'selected':''}>Criar tarefa</option></select></label><label>Responsável / destinatário<select data-action-user>${productivityUserOptions(target)}</select></label></div>
+    <div data-notify-fields class="builder-grid ${type==='notify'?'':'hidden'}"><label class="builder-span-2">Título da notificação<input data-action-title value="${esc(action.title||'Automação executada')}" placeholder="Ex.: Tarefa urgente criada"></label><label class="builder-span-2">Mensagem<textarea data-action-message rows="2" placeholder="Mensagem que o usuário receberá">${esc(action.message||'Uma condição da automação foi atendida.')}</textarea></label><label>Nível<select data-action-level><option value="info" ${action.level==='info'||!action.level?'selected':''}>Informação</option><option value="warning" ${action.level==='warning'?'selected':''}>Atenção</option><option value="danger" ${action.level==='danger'?'selected':''}>Crítico</option></select></label></div>
+    <div data-task-fields class="builder-grid ${type==='task'?'':'hidden'}"><label class="builder-span-2">Título da tarefa<input data-task-title value="${esc(action.title||'Ação automática')}" placeholder="Ex.: Revisar cadastro"></label><label class="builder-span-2">Descrição<textarea data-task-description rows="2">${esc(action.description||'')}</textarea></label><label>Prioridade<select data-task-priority>${Object.entries(productivityPriorityLabels).map(([value,text])=>`<option value="${value}" ${(action.priority||'normal')===value?'selected':''}>${text}</option>`).join('')}</select></label><label>Prazo específico <span class="muted">(opcional)</span><input data-task-due type="datetime-local" value="${esc(action.due_at||'')}"></label></div>
+  </article>`;
 }
-function openDashboardViewForm(){
-  modal('Nova visão de dashboard',`<form id="dashboard-view-form" class="form-grid"><label class="full">Nome<input name="name" required></label><label class="full">Configuração dos widgets (JSON)<textarea name="config">{"widgets":["summary","tasks","notifications"]}</textarea></label><label class="check-item full"><input name="shared" type="checkbox"><span>Compartilhar com o perfil</span></label><label class="check-item full"><input name="is_default" type="checkbox"><span>Usar como padrão</span></label><div class="full form-actions"><button class="btn" type="button" data-close-modal>Cancelar</button><button class="btn primary" type="submit">Salvar visão</button></div></form>`,{wide:true});
-  $('#dashboard-view-form').addEventListener('submit',async e=>{e.preventDefault();const d=formObject(e.currentTarget);try{d.config=JSON.parse(d.config||'{}');await api('/api/custom-dashboards',{method:'POST',body:d});closeModal();toast('Visão salva.');renderWorkCenter();}catch(error){toast(error.message,'error');}});
+function syncAutomationActionCard(card){
+  const type=$('[data-action-type]',card)?.value||'notify';
+  $('[data-notify-fields]',card)?.classList.toggle('hidden',type!=='notify');
+  $('[data-task-fields]',card)?.classList.toggle('hidden',type!=='task');
+}
+function renumberAutomationActions(root){
+  $$('[data-automation-action]',root).forEach((card,index)=>{const label=$('.builder-card-index',card);if(label)label.textContent=`Ação ${index+1}`;const remove=$('[data-remove-action]',card);if(remove)remove.disabled=$$('[data-automation-action]',root).length===1;});
+}
+async function openAutomationForm(id=null){
+  await ensureProductivityReferenceData();
+  const rule=id?(state.productivityAutomationRules||[]).find(item=>Number(item.id)===Number(id)):null;
+  const trigger=rule?.trigger_event||'task.created';
+  modal(rule?'Editar automação':'Nova automação',`<form id="automation-form" class="builder-form">
+    <div class="builder-intro"><span class="builder-step">1</span><div><strong>Defina o gatilho</strong><small>Escolha em linguagem simples quando essa regra deverá iniciar.</small></div></div>
+    <div class="builder-grid"><label>Nome da automação<input name="name" required minlength="3" value="${esc(rule?.name||'')}" placeholder="Ex.: Avisar tarefa urgente"></label><label>Quando isso acontecer<select name="trigger_event"><option value="task.created" ${trigger==='task.created'?'selected':''}>Uma tarefa for criada</option><option value="task.updated" ${trigger==='task.updated'?'selected':''}>Uma tarefa for atualizada</option><option value="form.submitted" ${trigger==='form.submitted'?'selected':''}>Um formulário for enviado</option></select></label></div>
+    <section class="builder-section"><header><span class="builder-step">2</span><div><strong>Condição</strong><small>Opcional. Use somente quando a automação não deve rodar em todos os casos.</small></div></header><div id="automation-condition-zone">${automationConditionEditor(trigger,rule?.conditions||{})}</div></section>
+    <section class="builder-section"><header><span class="builder-step">3</span><div><strong>Ações</strong><small>Adicione uma ou mais coisas que o sistema fará automaticamente.</small></div></header><div id="automation-actions" class="builder-card-list">${(rule?.actions?.length?rule.actions:[{type:'notify',user_id:state.user?.id,title:'Automação executada',message:'Uma condição da automação foi atendida.'}]).map((action,index)=>automationActionCard(action,index)).join('')}</div><button type="button" class="btn builder-add" id="add-automation-action">＋ Adicionar outra ação</button></section>
+    <label class="builder-switch"><span><strong>Automação ativa</strong><small>Quando desativada, a regra fica salva sem executar.</small></span><input type="checkbox" name="active" ${rule?.active===0?'':'checked'}></label>
+    <div class="builder-footer"><button class="btn ghost" type="button" data-close-modal>Cancelar</button><button class="btn primary" type="submit">${rule?'Salvar alterações':'Criar automação'}</button></div>
+  </form>`,{wide:true});
+  const form=$('#automation-form');
+  const conditionZone=$('#automation-condition-zone');
+  const actionsRoot=$('#automation-actions');
+  const bindCondition=()=>{const mode=$('[name="condition_mode"]',conditionZone);const detail=$('[data-condition-detail]',conditionZone);mode?.addEventListener('change',()=>detail?.classList.toggle('hidden',mode.value!=='filter'));};
+  bindCondition();
+  form.elements.trigger_event.addEventListener('change',()=>{conditionZone.innerHTML=automationConditionEditor(form.elements.trigger_event.value,{});bindCondition();});
+  actionsRoot.addEventListener('change',event=>{if(event.target.matches('[data-action-type]'))syncAutomationActionCard(event.target.closest('[data-automation-action]'));});
+  actionsRoot.addEventListener('click',event=>{const remove=event.target.closest('[data-remove-action]');if(!remove)return;remove.closest('[data-automation-action]')?.remove();renumberAutomationActions(actionsRoot);});
+  $('#add-automation-action').addEventListener('click',()=>{actionsRoot.insertAdjacentHTML('beforeend',automationActionCard({},$$('[data-automation-action]',actionsRoot).length));renumberAutomationActions(actionsRoot);});
+  renumberAutomationActions(actionsRoot);
+  form.addEventListener('submit',async event=>{
+    event.preventDefault();
+    const data=formObject(form);
+    const conditionEditor=$('.condition-editor',conditionZone); const mode=$('[name="condition_mode"]',conditionZone)?.value;
+    const conditions={};
+    if(mode==='filter'){
+      const key=conditionEditor?.dataset.conditionField; let value=$('[data-condition-value]',conditionEditor)?.value||'';
+      if(!value){toast('Escolha o valor da condição.','error');return;}
+      if(key==='form_id')value=Number(value);
+      conditions[key]=value;
+    }
+    const actions=$$('[data-automation-action]',actionsRoot).map(card=>{
+      const type=$('[data-action-type]',card).value; const userId=Number($('[data-action-user]',card).value||0);
+      if(type==='task') return {type:'task',assigned_user_id:userId,title:$('[data-task-title]',card).value.trim()||'Ação automática',description:$('[data-task-description]',card).value.trim(),priority:$('[data-task-priority]',card).value,due_at:$('[data-task-due]',card).value||null};
+      return {type:'notify',user_id:userId,title:$('[data-action-title]',card).value.trim()||'Automação executada',message:$('[data-action-message]',card).value.trim()||'Uma condição da automação foi atendida.',level:$('[data-action-level]',card).value};
+    });
+    if(actions.some(action=>!(action.user_id||action.assigned_user_id))){toast('Escolha o destinatário de todas as ações.','error');return;}
+    const payload={id:rule?.id,name:String(data.name||'').trim(),trigger_event:data.trigger_event,conditions,actions,active:Boolean(data.active)};
+    try{await api('/api/automations',{method:'POST',body:payload});closeModal();toast(rule?'Automação atualizada.':'Automação criada.');renderWorkCenter();}catch(error){toast(error.message,'error');}
+  });
+}
+
+function customFieldCard(field={},index=0){
+  const type=field.type||'text';
+  const options=Array.isArray(field.options)?field.options.join(', '):(field.options||'');
+  return `<article class="builder-card custom-field-card" data-custom-field><header class="builder-card-head"><div><span class="builder-card-index">Campo ${index+1}</span><strong>${esc(field.label||'Novo campo')}</strong></div><button type="button" class="icon-btn builder-remove" data-remove-field title="Remover campo">×</button></header><div class="builder-grid"><label>Nome exibido<input data-field-label required value="${esc(field.label||'')}" placeholder="Ex.: Número do contrato"></label><label>Identificador<input data-field-key value="${esc(field.key||'')}" placeholder="numero_contrato"><small>Gerado automaticamente; pode ser ajustado.</small></label><label>Tipo<select data-field-type>${customFieldTypes.map(([value,label])=>`<option value="${value}" ${type===value?'selected':''}>${label}</option>`).join('')}</select></label><label>Texto de ajuda<input data-field-placeholder value="${esc(field.placeholder||'')}" placeholder="Ex.: Digite o número..."></label><label class="builder-span-2 field-options ${type==='select'?'':'hidden'}" data-field-options-wrap>Opções da lista<input data-field-options value="${esc(options)}" placeholder="Ex.: Novo, Em análise, Concluído"><small>Separe as opções por vírgula.</small></label></div><label class="builder-switch compact"><span><strong>Campo obrigatório</strong><small>O registro só poderá ser salvo quando este campo for preenchido.</small></span><input type="checkbox" data-field-required ${field.required?'checked':''}></label></article>`;
+}
+function renumberCustomFields(root){$$('[data-custom-field]',root).forEach((card,index)=>{const i=$('.builder-card-index',card);if(i)i.textContent=`Campo ${index+1}`;const title=$('.builder-card-head strong',card);const label=$('[data-field-label]',card)?.value.trim();if(title)title.textContent=label||'Novo campo';const remove=$('[data-remove-field]',card);if(remove)remove.disabled=$$('[data-custom-field]',root).length===1;});}
+async function openCustomFormBuilder(id=null){
+  const formData=id?(state.productivityForms||[]).find(item=>Number(item.id)===Number(id)):null;
+  modal(formData?'Editar formulário':'Novo formulário',`<form id="custom-form-builder" class="builder-form"><div class="builder-intro"><span class="builder-step">1</span><div><strong>Informações do formulário</strong><small>Dê um nome claro. O código interno será criado automaticamente.</small></div></div><div class="builder-grid"><label>Nome<input name="name" required minlength="2" value="${esc(formData?.name||'')}" placeholder="Ex.: Vistoria técnica"></label><label>Código interno<input name="code" value="${esc(formData?.code||'')}" placeholder="vistoria_tecnica"><small>Use letras, números e sublinhado.</small></label><label class="builder-span-2">Descrição<textarea name="description" rows="2" placeholder="Explique quando esse formulário deve ser usado.">${esc(formData?.description||'')}</textarea></label></div><section class="builder-section"><header><span class="builder-step">2</span><div><strong>Campos</strong><small>Adicione os campos e escolha o tipo de informação. Nenhum JSON necessário.</small></div></header><div id="custom-fields" class="builder-card-list">${((formData?.schema?.length?formData.schema:[{label:'Nome',key:'nome',type:'text',required:true}])).map((field,index)=>customFieldCard(field,index)).join('')}</div><button type="button" class="btn builder-add" id="add-custom-field">＋ Adicionar campo</button></section>${formData?`<label class="builder-switch"><span><strong>Formulário ativo</strong><small>Formulários inativos permanecem salvos, mas não aceitam novos registros.</small></span><input type="checkbox" name="active" ${formData.active?'checked':''}></label>`:''}<div class="builder-footer"><button class="btn ghost" type="button" data-close-modal>Cancelar</button><button class="btn primary" type="submit">${formData?'Salvar alterações':'Criar formulário'}</button></div></form>`,{wide:true});
+  const form=$('#custom-form-builder'); const root=$('#custom-fields');
+  const nameInput=form.elements.name, codeInput=form.elements.code;
+  nameInput.addEventListener('input',()=>{if(!codeInput.dataset.manual)codeInput.value=slugBuilderKey(nameInput.value);});
+  codeInput.addEventListener('input',()=>{codeInput.dataset.manual='1';codeInput.value=slugBuilderKey(codeInput.value);});
+  root.addEventListener('input',event=>{const card=event.target.closest('[data-custom-field]');if(!card)return;if(event.target.matches('[data-field-label]')){const key=$('[data-field-key]',card);if(key&&!key.dataset.manual)key.value=slugBuilderKey(event.target.value);renumberCustomFields(root);}if(event.target.matches('[data-field-key]')){event.target.dataset.manual='1';event.target.value=slugBuilderKey(event.target.value);}});
+  root.addEventListener('change',event=>{if(!event.target.matches('[data-field-type]'))return;const card=event.target.closest('[data-custom-field]');$('[data-field-options-wrap]',card)?.classList.toggle('hidden',event.target.value!=='select');});
+  root.addEventListener('click',event=>{const remove=event.target.closest('[data-remove-field]');if(!remove)return;remove.closest('[data-custom-field]')?.remove();renumberCustomFields(root);});
+  $('#add-custom-field').addEventListener('click',()=>{root.insertAdjacentHTML('beforeend',customFieldCard({},$$('[data-custom-field]',root).length));renumberCustomFields(root);});
+  renumberCustomFields(root);
+  form.addEventListener('submit',async event=>{event.preventDefault();const data=formObject(form);const schema=$$('[data-custom-field]',root).map(card=>{const type=$('[data-field-type]',card).value;const field={label:$('[data-field-label]',card).value.trim(),key:slugBuilderKey($('[data-field-key]',card).value||$('[data-field-label]',card).value),type,required:$('[data-field-required]',card).checked,placeholder:$('[data-field-placeholder]',card).value.trim()};if(type==='select')field.options=$('[data-field-options]',card).value.split(',').map(value=>value.trim()).filter(Boolean);return field;});if(schema.some(field=>!field.label||!field.key)){toast('Preencha o nome de todos os campos.','error');return;}const keys=schema.map(field=>field.key);if(new Set(keys).size!==keys.length){toast('Existem campos com identificadores repetidos.','error');return;}const payload={id:formData?.id,name:String(data.name||'').trim(),code:slugBuilderKey(data.code||data.name),description:String(data.description||'').trim(),schema,active:formData?Boolean(data.active):true};try{await api('/api/custom-forms',{method:'POST',body:payload});closeModal();toast(formData?'Formulário atualizado.':'Formulário criado.');renderWorkCenter();}catch(error){toast(error.message,'error');}});
+}
+
+async function openDashboardViewForm(id=null){
+  const view=id?(state.productivityDashboards||[]).find(item=>Number(item.id)===Number(id)):null;
+  const selected=new Set(view?.config?.widgets||['summary','tasks','notifications']);
+  modal(view?'Editar visão de dashboard':'Nova visão de dashboard',`<form id="dashboard-view-form" class="builder-form"><div class="builder-intro"><span class="builder-step">1</span><div><strong>Nome e finalidade</strong><small>Crie uma visão simples e escolha abaixo quais blocos devem aparecer.</small></div></div><div class="builder-grid"><label class="builder-span-2">Nome da visão<input name="name" required minlength="2" value="${esc(view?.name||'')}" placeholder="Ex.: Gestão diária"></label></div><section class="builder-section"><header><span class="builder-step">2</span><div><strong>Widgets</strong><small>Marque somente as informações relevantes para esta visão.</small></div></header><div class="widget-picker">${dashboardWidgetCatalog.map(widget=>`<label class="widget-choice"><input type="checkbox" name="dashboard_widget" value="${widget.code}" ${selected.has(widget.code)?'checked':''}><span><strong>${esc(widget.label)}</strong><small>${esc(widget.description)}</small></span></label>`).join('')}</div></section><div class="builder-grid"><label class="builder-switch"><span><strong>Compartilhar com o perfil</strong><small>Todos com acesso ao perfil poderão usar esta visão.</small></span><input name="shared" type="checkbox" ${view&&!view.owner_user_id?'checked':''}></label><label class="builder-switch"><span><strong>Usar como padrão</strong><small>Prioriza esta visão na lista de dashboards.</small></span><input name="is_default" type="checkbox" ${view?.is_default?'checked':''}></label></div><div class="builder-footer"><button class="btn ghost" type="button" data-close-modal>Cancelar</button><button class="btn primary" type="submit">${view?'Salvar alterações':'Salvar visão'}</button></div></form>`,{wide:true});
+  const form=$('#dashboard-view-form');
+  form.addEventListener('submit',async event=>{event.preventDefault();const data=formObject(form);const widgets=$$('input[name="dashboard_widget"]:checked',form).map(input=>input.value);if(!widgets.length){toast('Escolha pelo menos um widget.','error');return;}const payload={id:view?.id,name:String(data.name||'').trim(),config:{widgets},shared:Boolean(data.shared),is_default:Boolean(data.is_default)};try{await api('/api/custom-dashboards',{method:'POST',body:payload});closeModal();toast(view?'Visão atualizada.':'Visão salva.');renderWorkCenter();}catch(error){toast(error.message,'error');}});
 }

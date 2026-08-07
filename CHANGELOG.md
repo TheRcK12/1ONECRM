@@ -1,3 +1,14 @@
+# 2.6.2-beta.1
+
+- Substitui os campos JSON das automações por um construtor visual com gatilho, condição e múltiplas ações.
+- Substitui o JSON do construtor de formulários por campos adicionáveis e configuráveis pela interface.
+- Substitui o JSON das visões de dashboard por seleção visual de widgets.
+- Reorganiza a Central de Produtividade com cards, métricas, listas e tabelas responsivas.
+- Permite escolher responsável ao criar tarefa e editar automações, formulários e visões já cadastrados.
+- Corrige alinhamento e responsividade do cabeçalho, seletor de perfil, busca e controles da conta.
+- Atualiza o cache-busting dos arquivos estáticos para 2.6.2.
+- Corrige o Dockerfile para incluir `one_crm_productivity.py` na imagem Railway.
+
 # 2.6.1-beta.1
 
 - Restaura a aba **Backups** no menu Administrativo do Dono da Plataforma.

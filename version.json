@@ -1,6 +1,6 @@
 {
   "name": "ONE CRM",
-  "version": "2.6.1-beta.1",
+  "version": "2.6.2-beta.1",
   "channel": "beta-online",
-  "description": "Restaura a aba global de Backups para o Dono da Plataforma e reforça a proteção da API."
+  "description": "Substitui configurações JSON por construtores visuais e reorganiza a Central de Produtividade e o cabeçalho."
 }
