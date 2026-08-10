@@ -163,6 +163,33 @@ function hexToRgb(hex){
   if(!/^[0-9a-f]{6}$/i.test(raw)) return {r:85,g:230,b:157};
   return {r:parseInt(raw.slice(0,2),16),g:parseInt(raw.slice(2,4),16),b:parseInt(raw.slice(4,6),16)};
 }
+function rgbToHex(r,g,b){
+  const part=value=>Math.max(0,Math.min(255,Math.round(Number(value)||0))).toString(16).padStart(2,'0');
+  return `#${part(r)}${part(g)}${part(b)}`;
+}
+function rgbToHsv(r,g,b){
+  r/=255;g/=255;b/=255;
+  const max=Math.max(r,g,b),min=Math.min(r,g,b),delta=max-min;
+  let h=0;
+  if(delta){
+    if(max===r)h=60*(((g-b)/delta)%6);
+    else if(max===g)h=60*((b-r)/delta+2);
+    else h=60*((r-g)/delta+4);
+  }
+  if(h<0)h+=360;
+  return {h,s:max===0?0:delta/max,v:max};
+}
+function hsvToRgb(h,s,v){
+  h=((Number(h)||0)%360+360)%360;s=Math.max(0,Math.min(1,Number(s)||0));v=Math.max(0,Math.min(1,Number(v)||0));
+  const c=v*s,x=c*(1-Math.abs((h/60)%2-1)),m=v-c;
+  let rp=0,gp=0,bp=0;
+  if(h<60){rp=c;gp=x;}else if(h<120){rp=x;gp=c;}else if(h<180){gp=c;bp=x;}else if(h<240){gp=x;bp=c;}else if(h<300){rp=x;bp=c;}else{rp=c;bp=x;}
+  return {r:(rp+m)*255,g:(gp+m)*255,b:(bp+m)*255};
+}
+function accentHex(accent=currentAccent()){
+  const normalized=normalizeAccent(accent);
+  return String(accentPresets[normalized]?.hex || normalized || '#55e69d').toLowerCase();
+}
 function mixHex(hex, target, amount){
   const a=hexToRgb(hex),b=hexToRgb(target);const p=Math.max(0,Math.min(1,amount));
   const c=n=>Math.round(a[n]+(b[n]-a[n])*p).toString(16).padStart(2,'0');
@@ -2242,6 +2269,80 @@ async function renderIntegrations() {
   $('#test-local')?.addEventListener('click',e=>testProvider(e.currentTarget,'local'));
 }
 
+function openAccentColorStudio(){
+  const initialHex=accentHex();
+  const initialRgb=hexToRgb(initialHex);
+  const initialHsv=rgbToHsv(initialRgb.r,initialRgb.g,initialRgb.b);
+  let hue=initialHsv.h,saturation=initialHsv.s,value=initialHsv.v,selectedHex=initialHex;
+  const quickColors=['#55e69d','#48dfe5','#62a8ff','#a983ff','#ff72ad','#f0b95d','#ff6b6b','#ffffff'];
+  modal('Personalizar cor de destaque',`
+    <div class="color-studio">
+      <section class="color-studio-hero">
+        <div class="color-studio-orb" id="color-studio-orb" style="--picker-color:${esc(initialHex)}"></div>
+        <div><span class="color-studio-kicker">PRÉVIA EM TEMPO REAL</span><strong id="color-studio-hex-label">${esc(initialHex.toUpperCase())}</strong><small>Essa cor será usada em ações, foco, navegação e no brilho neon.</small></div>
+      </section>
+      <div class="color-studio-grid">
+        <div class="color-studio-picker-column">
+          <div class="color-sv-board" id="color-sv-board" role="slider" tabindex="0" aria-label="Saturação e brilho" aria-valuemin="0" aria-valuemax="100">
+            <span id="color-sv-thumb" class="color-sv-thumb"></span>
+          </div>
+          <div class="color-hue-wrap">
+            <div class="color-control-label"><span>Matiz</span><small id="color-hue-value">${Math.round(hue)}°</small></div>
+            <div class="color-hue-track" id="color-hue-track" role="slider" tabindex="0" aria-label="Matiz" aria-valuemin="0" aria-valuemax="360" aria-valuenow="${Math.round(hue)}"><span id="color-hue-thumb" class="color-hue-thumb"></span></div>
+          </div>
+        </div>
+        <div class="color-studio-values">
+          <label class="color-hex-field"><span>HEX</span><div><b>#</b><input id="color-hex-input" inputmode="text" autocomplete="off" spellcheck="false" maxlength="6" value="${esc(initialHex.slice(1).toUpperCase())}"></div><small>Digite uma cor ou use o painel ao lado.</small></label>
+          <div class="color-rgb-values"><div><span>R</span><strong id="color-r-value">${initialRgb.r}</strong></div><div><span>G</span><strong id="color-g-value">${initialRgb.g}</strong></div><div><span>B</span><strong id="color-b-value">${initialRgb.b}</strong></div></div>
+          <div class="color-quick-group"><span>Cores rápidas</span><div class="color-quick-list">${quickColors.map(color=>`<button type="button" data-color-quick="${color}" style="--quick-color:${color}" aria-label="Usar ${color}"></button>`).join('')}</div></div>
+          <div class="color-studio-note"><span class="color-note-dot"></span><p>O sistema gera automaticamente a tonalidade escura e o brilho neon a partir da cor escolhida.</p></div>
+        </div>
+      </div>
+      <footer class="color-studio-actions"><button type="button" class="btn ghost" data-close-modal>Cancelar</button><button type="button" class="btn primary" id="apply-accent-studio">Aplicar cor</button></footer>
+    </div>`,{wide:true});
+
+  const board=$('#color-sv-board'),boardThumb=$('#color-sv-thumb'),hueTrack=$('#color-hue-track'),hueThumb=$('#color-hue-thumb'),hexInput=$('#color-hex-input');
+  const updateUi=()=>{
+    const rgb=hsvToRgb(hue,saturation,value);
+    selectedHex=rgbToHex(rgb.r,rgb.g,rgb.b);
+    const pure=hsvToRgb(hue,1,1);const pureHex=rgbToHex(pure.r,pure.g,pure.b);
+    board.style.setProperty('--hue-color',pureHex);
+    boardThumb.style.left=`${saturation*100}%`;boardThumb.style.top=`${(1-value)*100}%`;boardThumb.style.setProperty('--thumb-color',selectedHex);
+    hueThumb.style.left=`${(hue/360)*100}%`;hueThumb.style.setProperty('--thumb-color',pureHex);
+    hueTrack.setAttribute('aria-valuenow',String(Math.round(hue)));
+    $('#color-hue-value').textContent=`${Math.round(hue)}°`;
+    $('#color-studio-orb').style.setProperty('--picker-color',selectedHex);
+    $('#color-studio-hex-label').textContent=selectedHex.toUpperCase();
+    if(document.activeElement!==hexInput)hexInput.value=selectedHex.slice(1).toUpperCase();
+    const exact=hexToRgb(selectedHex);$('#color-r-value').textContent=exact.r;$('#color-g-value').textContent=exact.g;$('#color-b-value').textContent=exact.b;
+  };
+  const setFromHex=hex=>{
+    const normalized=String(hex||'').trim().replace('#','');
+    if(!/^[0-9a-f]{6}$/i.test(normalized))return false;
+    const rgb=hexToRgb(`#${normalized}`),hsv=rgbToHsv(rgb.r,rgb.g,rgb.b);hue=hsv.h;saturation=hsv.s;value=hsv.v;updateUi();return true;
+  };
+  const pointIn=(event,element)=>{
+    const rect=element.getBoundingClientRect();
+    return {x:Math.max(0,Math.min(1,(event.clientX-rect.left)/rect.width)),y:Math.max(0,Math.min(1,(event.clientY-rect.top)/rect.height))};
+  };
+  const drag=(element,move)=>{
+    element.addEventListener('pointerdown',event=>{event.preventDefault();element.setPointerCapture?.(event.pointerId);move(event);const onMove=e=>move(e);const done=()=>{element.removeEventListener('pointermove',onMove);element.removeEventListener('pointerup',done);element.removeEventListener('pointercancel',done);};element.addEventListener('pointermove',onMove);element.addEventListener('pointerup',done);element.addEventListener('pointercancel',done);});
+  };
+  drag(board,event=>{const p=pointIn(event,board);saturation=p.x;value=1-p.y;updateUi();});
+  drag(hueTrack,event=>{const p=pointIn(event,hueTrack);hue=Math.min(359.999,p.x*360);updateUi();});
+  board.addEventListener('keydown',event=>{const step=event.shiftKey?.05:.01;if(event.key==='ArrowLeft')saturation=Math.max(0,saturation-step);else if(event.key==='ArrowRight')saturation=Math.min(1,saturation+step);else if(event.key==='ArrowUp')value=Math.min(1,value+step);else if(event.key==='ArrowDown')value=Math.max(0,value-step);else return;event.preventDefault();updateUi();});
+  hueTrack.addEventListener('keydown',event=>{const step=event.shiftKey?15:2;if(event.key==='ArrowLeft')hue=(hue-step+360)%360;else if(event.key==='ArrowRight')hue=(hue+step)%360;else return;event.preventDefault();updateUi();});
+  hexInput.addEventListener('input',event=>{event.currentTarget.value=event.currentTarget.value.replace(/[^0-9a-f]/gi,'').toUpperCase().slice(0,6);if(event.currentTarget.value.length===6)setFromHex(event.currentTarget.value);});
+  hexInput.addEventListener('blur',()=>{if(!setFromHex(hexInput.value)){hexInput.value=selectedHex.slice(1).toUpperCase();toast('Informe uma cor HEX com 6 caracteres.','error');}});
+  $$('[data-color-quick]').forEach(button=>button.addEventListener('click',()=>setFromHex(button.dataset.colorQuick)));
+  $('#apply-accent-studio').addEventListener('click',async()=>{
+    const accent=normalizeAccent(selectedHex);applyAccent(accent);state.user.accent_preference=accent;
+    try{await saveAppearance({accent});closeModal();toast(`Cor ${accent.toUpperCase()} aplicada.`);renderAccount();}
+    catch(error){toast(error.message,'error');}
+  });
+  updateUi();
+}
+
 async function renderAccount() {
   setPage('Meu perfil','CONTA E PREFERÊNCIAS');
   const result = await api('/api/me');
@@ -2273,7 +2374,7 @@ async function renderAccount() {
           </div></div>
           <div class="appearance-group"><div class="appearance-group-head"><strong>Cor de destaque</strong><small>Menus, botões, foco e brilho neon</small></div>
             <div class="accent-choice" role="group" aria-label="Cor de destaque">${Object.entries(accentPresets).map(([code,item])=>`<button type="button" class="accent-swatch ${currentAccent()===code?'active':''}" data-accent-choice="${code}" title="${esc(item.label)}" aria-label="${esc(item.label)}"><i style="--swatch:${item.hex}"></i><span>${esc(item.label)}</span></button>`).join('')}</div>
-            <label class="custom-accent-row"><span><strong>Cor personalizada</strong><small>Escolha qualquer cor hexadecimal</small></span><input id="custom-accent-picker" type="color" value="${esc(accentPresets[currentAccent()]?.hex || currentAccent())}" aria-label="Cor personalizada"></label>
+            <button class="custom-accent-row" id="open-accent-studio" type="button" aria-label="Abrir editor avançado de cor"><i class="current-accent-preview" style="--current-accent:${esc(accentHex())}"></i><span><strong>Cor personalizada</strong><small>${esc(accentHex().toUpperCase())} · editor avançado</small></span><b>Personalizar</b></button>
           </div>
           <div class="appearance-group"><div class="appearance-group-head"><strong>Fundo do modo escuro</strong><small>Altera apenas as superfícies neutras</small></div>
             <div class="background-choice" role="group" aria-label="Fundo escuro">${Object.entries(backgroundPresets).map(([code,item])=>`<button type="button" class="background-swatch ${currentBackground()===code?'active':''}" data-background-choice="${code}"><i class="background-preview ${code}"></i><span>${esc(item.label)}</span></button>`).join('')}</div>
@@ -2311,12 +2412,7 @@ async function renderAccount() {
     try{await saveAppearance({accent});toast(`Destaque ${accentPresets[accent]?.label||accent} aplicado.`);renderAccount();}
     catch(error){toast(error.message,'error');}
   }));
-  $('#custom-accent-picker')?.addEventListener('change',async event=>{
-    const accent=normalizeAccent(event.currentTarget.value);
-    applyAccent(accent);state.user.accent_preference=accent;
-    try{await saveAppearance({accent});toast('Cor personalizada aplicada.');renderAccount();}
-    catch(error){toast(error.message,'error');}
-  });
+  $('#open-accent-studio')?.addEventListener('click',openAccentColorStudio);
   $$('[data-background-choice]').forEach(button=>button.addEventListener('click',async()=>{
     const background=button.dataset.backgroundChoice;
     applyBackground(background);state.user.background_preference=background;

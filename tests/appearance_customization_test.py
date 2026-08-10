@@ -8,7 +8,9 @@ profiles = (ROOT / "one_crm_profiles.py").read_text(encoding="utf-8")
 theme = (ROOT / "static" / "theme-init.js").read_text(encoding="utf-8")
 
 assert "data-accent-choice" in app
-assert "custom-accent-picker" in app
+assert "open-accent-studio" in app
+assert "openAccentColorStudio" in app
+assert 'type="color"' not in app
 assert "data-background-choice" in app
 assert "/api/me/appearance" in app
 assert "accent_preference" in server

@@ -1,3 +1,11 @@
+# ONE CRM 2.6.7-beta.1
+
+- Substitui o seletor de cor nativo do sistema operacional por um editor próprio do ONE CRM.
+- Adiciona painel visual de saturação e brilho, faixa de matiz, entrada HEX e leitura RGB.
+- Adiciona cores rápidas, prévia dinâmica e brilho neon calculado em tempo real.
+- Mantém a persistência de cor por usuário introduzida na 2.6.6.
+- Melhora responsividade e navegação por teclado no editor de cor.
+
 # Changelog
 
 ## 2.6.6-beta.1 — Aparência personalizável

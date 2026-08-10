@@ -1,6 +1,6 @@
 {
   "name": "ONE CRM",
-  "version": "2.6.6-beta.1",
+  "version": "2.6.7-beta.1",
   "channel": "beta-online",
-  "description": "Personalização visual por usuário: cor de destaque com neon controlado, cor customizável e fundos escuros selecionáveis."
+  "description": "Editor moderno de cor integrado ao ONE CRM, sem depender do seletor nativo do Windows."
 }
