@@ -19,9 +19,9 @@ assert "profile-select-control" in APP
 assert ".work-metrics" in CSS
 assert ".builder-form" in CSS
 assert ".profile-select-control" in CSS
-assert "/static/app.css?v=2.6.2" in INDEX
-assert "/static/app.js?v=2.6.2" in INDEX
+assert "/static/app.css?v=2.6.6" in INDEX
+assert "/static/app.js?v=2.6.6" in INDEX
 assert "one_crm_productivity.py" in DOCKER
-assert 'org.opencontainers.image.version="2.6.2-beta.1"' in DOCKER
+assert 'org.opencontainers.image.version="2.6.6-beta.1"' in DOCKER
 
 print("PRODUCTIVITY UX TEST: OK")

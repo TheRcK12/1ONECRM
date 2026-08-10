@@ -40,7 +40,7 @@ from one_crm_ai import (
 )
 
 APP_NAME = "ONE CRM"
-APP_VERSION = "2.6.2-beta.1"
+APP_VERSION = "2.6.6-beta.1"
 BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
 
@@ -480,6 +480,8 @@ def init_database() -> None:
         phone TEXT,
         bio TEXT,
         theme_preference TEXT NOT NULL DEFAULT 'dark' CHECK(theme_preference IN ('dark','light')),
+        accent_preference TEXT NOT NULL DEFAULT 'emerald',
+        background_preference TEXT NOT NULL DEFAULT 'graphite',
         password_hash TEXT NOT NULL,
         role_code TEXT NOT NULL CHECK(role_code IN ('owner','manager','bko','seller')),
         custom_role_code TEXT,
@@ -688,6 +690,8 @@ def init_database() -> None:
             "phone": "ALTER TABLE users ADD COLUMN phone TEXT",
             "bio": "ALTER TABLE users ADD COLUMN bio TEXT",
             "theme_preference": "ALTER TABLE users ADD COLUMN theme_preference TEXT NOT NULL DEFAULT 'dark'",
+            "accent_preference": "ALTER TABLE users ADD COLUMN accent_preference TEXT NOT NULL DEFAULT 'emerald'",
+            "background_preference": "ALTER TABLE users ADD COLUMN background_preference TEXT NOT NULL DEFAULT 'graphite'",
             "custom_role_code": "ALTER TABLE users ADD COLUMN custom_role_code TEXT",
         }
         for column, statement in migrations.items():
@@ -1357,6 +1361,8 @@ class OneCRMHandler(BaseHTTPRequestHandler):
             return self.api_profile_update(user)
         if method == "PUT" and path == "/api/me/theme":
             return self.api_theme_update(user)
+        if method == "PUT" and path == "/api/me/appearance":
+            return self.api_appearance_update(user)
         if method == "PUT" and path == "/api/me/password":
             return self.api_change_password(user)
         raise ApiError(404, "Rota não encontrada.")
@@ -1478,6 +1484,8 @@ class OneCRMHandler(BaseHTTPRequestHandler):
             "email": user["email"], "phone": user.get("phone") or "",
             "bio": user.get("bio") or "",
             "theme_preference": user.get("theme_preference") or "dark",
+            "accent_preference": user.get("accent_preference") or "emerald",
+            "background_preference": user.get("background_preference") or "graphite",
             "role_code": effective,
             "base_role": user["role_code"],
             "role_name": user.get("role_name") or SYSTEM_ROLES.get(user["role_code"], (effective, "", user["role_code"]))[0],
@@ -2485,6 +2493,28 @@ class OneCRMHandler(BaseHTTPRequestHandler):
                          (theme, utc_now(), user["id"]))
         audit(user["id"], "user.theme_update", "user", user["id"], {"theme": theme}, self.client_ip())
         self.send_json(200, {"ok": True, "theme": theme})
+
+    def api_appearance_update(self, user: dict[str, Any]) -> None:
+        data = self.read_json()
+        theme = (data.get("theme") or user.get("theme_preference") or "dark").strip().lower()
+        accent = (data.get("accent") or user.get("accent_preference") or "emerald").strip().lower()
+        background = (data.get("background") or user.get("background_preference") or "graphite").strip().lower()
+        accent_presets = {"emerald", "cyan", "blue", "violet", "rose", "amber"}
+        background_presets = {"graphite", "midnight", "obsidian", "forest"}
+        if theme not in {"dark", "light"}:
+            raise ApiError(400, "Tema inválido.")
+        if accent not in accent_presets and not re.fullmatch(r"#[0-9a-f]{6}", accent):
+            raise ApiError(400, "Cor de destaque inválida.")
+        if background not in background_presets:
+            raise ApiError(400, "Fundo inválido.")
+        with db_connect() as conn:
+            conn.execute(
+                "UPDATE users SET theme_preference=?,accent_preference=?,background_preference=?,updated_at=? WHERE id=?",
+                (theme, accent, background, utc_now(), user["id"]),
+            )
+        audit(user["id"], "user.appearance_update", "user", user["id"],
+              {"theme": theme, "accent": accent, "background": background}, self.client_ip())
+        self.send_json(200, {"ok": True, "appearance": {"theme": theme, "accent": accent, "background": background}})
 
     def api_change_password(self, user: dict[str, Any]) -> None:
         data = self.read_json()

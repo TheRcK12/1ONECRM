@@ -24,6 +24,47 @@ const state = {
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
 const esc = (value) => String(value ?? '').replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
+
+const UI_ICON_PATHS = {
+  home:'<path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10.5V20h13v-9.5"/><path d="M9.5 20v-6h5v6"/>',
+  users:'<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
+  shield:'<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10"/><path d="m9 12 2 2 4-4"/>',
+  sales:'<path d="M4 19.5V9.5"/><path d="M10 19.5V4.5"/><path d="M16 19.5v-7"/><path d="M22 19.5v-12"/>',
+  briefcase:'<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M3 12h18"/>',
+  wallet:'<path d="M20 7V5a2 2 0 0 0-2-2H5a3 3 0 0 0 0 6h15v12H5a3 3 0 0 1-3-3V6"/><path d="M16 13h4"/>',
+  analytics:'<path d="M4 19V9"/><path d="M10 19V5"/><path d="M16 19v-7"/><path d="M22 19V3"/>',
+  chart:'<path d="M3 3v18h18"/><path d="m7 15 4-4 3 3 5-7"/>',
+  ranking:'<path d="M8 21h8"/><path d="M12 17v4"/><path d="M7 4h10v4a5 5 0 0 1-10 0V4Z"/><path d="M7 6H4v2a3 3 0 0 0 3 3"/><path d="M17 6h3v2a3 3 0 0 1-3 3"/>',
+  sparkles:'<path d="m12 3-1.2 3.3L7.5 7.5l3.3 1.2L12 12l1.2-3.3 3.3-1.2-3.3-1.2L12 3Z"/><path d="m18 13-.8 2.2L15 16l2.2.8L18 19l.8-2.2L21 16l-2.2-.8L18 13Z"/><path d="m5 13-.6 1.4L3 15l1.4.6L5 17l.6-1.4L7 15l-1.4-.6L5 13Z"/>',
+  check:'<path d="m5 12 4 4L19 6"/>',
+  checkSquare:'<rect x="3" y="3" width="18" height="18" rx="3"/><path d="m8 12 3 3 5-6"/>',
+  settings:'<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6V21h-4v-.1a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H3v-4h.1a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1a1.7 1.7 0 0 0 1.9.3A1.7 1.7 0 0 0 10 3V3h4v.1a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9A1.7 1.7 0 0 0 21 10h.1v4H21a1.7 1.7 0 0 0-1.6 1Z"/>',
+  user:'<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
+  team:'<circle cx="8" cy="8" r="3"/><circle cx="17" cy="9" r="2.5"/><path d="M2.5 20a5.5 5.5 0 0 1 11 0"/><path d="M13 16a5 5 0 0 1 8.5 4"/>',
+  package:'<path d="m21 8-9 5-9-5 9-5 9 5Z"/><path d="m3 8 9 5 9-5"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/>',
+  catalog:'<path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v16H6.5A2.5 2.5 0 0 0 4 21.5v-16Z"/><path d="M4 18.5A2.5 2.5 0 0 1 6.5 16H20"/>',
+  key:'<circle cx="8" cy="15" r="4"/><path d="m11 12 8-8"/><path d="m15 8 2 2"/><path d="m17 6 2 2"/>',
+  history:'<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l3 2"/>',
+  database:'<ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/><path d="M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/>',
+  link:'<path d="M10 13a5 5 0 0 0 7.5.5l2-2a5 5 0 0 0-7-7l-1.1 1.1"/><path d="M14 11a5 5 0 0 0-7.5-.5l-2 2a5 5 0 0 0 7 7l1.1-1.1"/>',
+  grid:'<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>',
+  module:'<rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8 9h8M8 13h5M8 17h7"/>',
+  plus:'<path d="M12 5v14M5 12h14"/>',
+  clock:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+  calendar:'<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/>',
+  fingerprint:'<path d="M12 11a2 2 0 0 1 2 2c0 3-1 5-2 7"/><path d="M8.2 18c.8-1.8 1.3-3.5 1.3-5a2.5 2.5 0 0 1 5 0c0 2.8-.7 5.3-1.8 7.5"/><path d="M6 15.5c.3-.8.5-1.7.5-2.5a5.5 5.5 0 0 1 11 0c0 2.2-.4 4.2-1.1 6"/><path d="M4.2 11A8 8 0 0 1 19 8"/><path d="M5 8a8 8 0 0 1 13.8 3"/>',
+  xCircle:'<circle cx="12" cy="12" r="9"/><path d="m9 9 6 6M15 9l-6 6"/>',
+  bell:'<path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/><path d="M10 21h4"/>',
+  automation:'<path d="M4 7h10"/><path d="m11 4 3 3-3 3"/><path d="M20 17H10"/><path d="m13 14-3 3 3 3"/><circle cx="18" cy="7" r="2"/><circle cx="6" cy="17" r="2"/>',
+  form:'<path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5"/><path d="M9 12h6M9 16h6"/>',
+  alert:'<path d="M12 3 2.5 20h19L12 3Z"/><path d="M12 9v5M12 17h.01"/>',
+  chevronDown:'<path d="m7 10 5 5 5-5"/>',
+  eye:'<path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z"/><circle cx="12" cy="12" r="2.5"/>'
+};
+function uiIcon(name, size=16, extraClass='') {
+  const path = UI_ICON_PATHS[name] || UI_ICON_PATHS.module;
+  return `<svg class="ui-icon ${esc(extraClass)}" width="${Number(size)||16}" height="${Number(size)||16}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${path}</svg>`;
+}
 const nativeRoleLabels = {owner:'Dono',manager:'Gerente',bko:'BKO',seller:'Vendedor'};
 const baseRoleTypeLabels = {manager:'Gestão',bko:'Suporte / apoio',seller:'Operação principal'};
 const roleLabel = role => state.roles.find(item=>item.code===role)?.name || nativeRoleLabels[role] || role;
@@ -61,6 +102,26 @@ const fmtDateTime = value => {
     hour12: false,
   }).format(date);
 };
+
+function brasiliaDateParts() {
+  const parts = new Intl.DateTimeFormat('pt-BR', {
+    timeZone: BRASILIA_TIME_ZONE,
+    weekday:'long', day:'2-digit', month:'short', year:'numeric', hour:'2-digit', hour12:false
+  }).formatToParts(new Date());
+  return Object.fromEntries(parts.map(part=>[part.type,part.value]));
+}
+function dashboardGreeting() {
+  const parts = brasiliaDateParts();
+  const hour = Number(parts.hour || 12);
+  if (hour < 12) return 'Bom dia';
+  if (hour < 18) return 'Boa tarde';
+  return 'Boa noite';
+}
+function dashboardTodayLabel() {
+  const p = brasiliaDateParts();
+  const weekday = String(p.weekday || '').replace(/^./, c=>c.toUpperCase());
+  return `${weekday}, ${p.day} ${p.month} ${p.year}`;
+}
 const initials = name => String(name || 'OC').split(/\s+/).slice(0,2).map(x=>x[0]).join('').toUpperCase();
 const has = permission => state.user?.is_platform_owner || baseRole(state.user) === 'owner' || state.user?.permissions?.includes(permission);
 const isPlatformOwner = () => Boolean(state.user?.is_platform_owner);
@@ -78,6 +139,80 @@ const moduleEnabled = route => {
 };
 const presetLabel = (key, fallback='') => activePreset().navigation_labels?.[key] || fallback || key;
 const currentTheme = () => document.documentElement.dataset.theme === 'light' ? 'light' : 'dark';
+const accentPresets = {
+  emerald:{label:'Verde neon',hex:'#55e69d'},
+  cyan:{label:'Ciano',hex:'#48dfe5'},
+  blue:{label:'Azul elétrico',hex:'#62a8ff'},
+  violet:{label:'Roxo',hex:'#a983ff'},
+  rose:{label:'Rosa',hex:'#ff72ad'},
+  amber:{label:'Âmbar',hex:'#f0b95d'},
+};
+const backgroundPresets = {
+  graphite:{label:'Grafite'},
+  midnight:{label:'Meia-noite'},
+  obsidian:{label:'Obsidiana'},
+  forest:{label:'Floresta escura'},
+};
+const normalizeAccent = value => {
+  const raw=String(value||'').trim().toLowerCase();
+  return accentPresets[raw] || /^#[0-9a-f]{6}$/.test(raw) ? raw : 'emerald';
+};
+const normalizeBackground = value => backgroundPresets[String(value||'').trim().toLowerCase()] ? String(value).trim().toLowerCase() : 'graphite';
+function hexToRgb(hex){
+  const raw=String(hex||'').replace('#','');
+  if(!/^[0-9a-f]{6}$/i.test(raw)) return {r:85,g:230,b:157};
+  return {r:parseInt(raw.slice(0,2),16),g:parseInt(raw.slice(2,4),16),b:parseInt(raw.slice(4,6),16)};
+}
+function mixHex(hex, target, amount){
+  const a=hexToRgb(hex),b=hexToRgb(target);const p=Math.max(0,Math.min(1,amount));
+  const c=n=>Math.round(a[n]+(b[n]-a[n])*p).toString(16).padStart(2,'0');
+  return `#${c('r')}${c('g')}${c('b')}`;
+}
+function applyAccent(accent,{saveLocal=true}={}){
+  const normalized=normalizeAccent(accent);
+  const root=document.documentElement;
+  root.dataset.accent=accentPresets[normalized]?normalized:'custom';
+  if(accentPresets[normalized]){
+    ['--accent','--accent-strong','--accent-soft','--accent-glow','--accent-rgb','--accent-contrast','--cyan','--cyan-dark'].forEach(name=>root.style.removeProperty(name));
+  }else{
+    const rgb=hexToRgb(normalized);
+    const luminance=(0.2126*rgb.r+0.7152*rgb.g+0.0722*rgb.b)/255;
+    root.style.setProperty('--accent',normalized);
+    root.style.setProperty('--accent-strong',mixHex(normalized,'#000000',.22));
+    root.style.setProperty('--accent-soft',`rgba(${rgb.r},${rgb.g},${rgb.b},.12)`);
+    root.style.setProperty('--accent-glow',`rgba(${rgb.r},${rgb.g},${rgb.b},.24)`);
+    root.style.setProperty('--accent-rgb',`${rgb.r},${rgb.g},${rgb.b}`);
+    root.style.setProperty('--accent-contrast',luminance>.62?'#07100c':'#f7fbff');
+    root.style.setProperty('--cyan',normalized);
+    root.style.setProperty('--cyan-dark',mixHex(normalized,'#000000',.22));
+  }
+  if(saveLocal)localStorage.setItem('one-crm-accent',normalized);
+}
+function applyBackground(background,{saveLocal=true}={}){
+  const normalized=normalizeBackground(background);
+  document.documentElement.dataset.background=normalized;
+  if(saveLocal)localStorage.setItem('one-crm-background',normalized);
+  updateThemeUi();
+}
+function currentAccent(){return normalizeAccent(state.user?.accent_preference || localStorage.getItem('one-crm-accent') || 'emerald');}
+function currentBackground(){return normalizeBackground(state.user?.background_preference || localStorage.getItem('one-crm-background') || 'graphite');}
+function applyUserAppearance(user=state.user){
+  applyTheme(user?.theme_preference || localStorage.getItem('one-crm-theme') || 'dark');
+  applyAccent(user?.accent_preference || localStorage.getItem('one-crm-accent') || 'emerald');
+  applyBackground(user?.background_preference || localStorage.getItem('one-crm-background') || 'graphite');
+}
+async function saveAppearance(patch){
+  if(!state.user)return;
+  const payload={
+    theme:patch.theme || state.user.theme_preference || currentTheme(),
+    accent:patch.accent || state.user.accent_preference || currentAccent(),
+    background:patch.background || state.user.background_preference || currentBackground(),
+  };
+  const result=await api('/api/me/appearance',{method:'PUT',body:payload});
+  state.user.theme_preference=result.appearance.theme;
+  state.user.accent_preference=result.appearance.accent;
+  state.user.background_preference=result.appearance.background;
+}
 function updateThemeUi() {
   const light = currentTheme() === 'light';
   const icon = $('#theme-icon');
@@ -95,7 +230,7 @@ function updateThemeUi() {
     authButton.setAttribute('aria-label', authButton.title);
   }
   const meta = document.querySelector('meta[name="theme-color"]');
-  if (meta) meta.content = light ? '#f3f7f8' : '#0d1518';
+  if (meta) meta.content = light ? '#f3f5f7' : getComputedStyle(document.documentElement).getPropertyValue('--bg').trim() || '#0b1012';
 }
 function applyTheme(theme, {saveLocal=true}={}) {
   const normalized = theme === 'light' ? 'light' : 'dark';
@@ -108,7 +243,7 @@ async function toggleTheme() {
   applyTheme(next);
   if (state.user) {
     state.user.theme_preference = next;
-    try { await api('/api/me/theme',{method:'PUT',body:{theme:next}}); }
+    try { await saveAppearance({theme:next}); }
     catch(error) { toast('Tema aplicado neste navegador, mas não foi salvo na conta: ' + error.message,'error'); }
   }
 }
@@ -316,9 +451,9 @@ function setPage(title, eyebrow='ONE CRM') {
 }
 
 const salesNavigationItems = [
-  {id:'sales',label:'Todas as vendas',icon:'▤',test:()=>has('sales.own')||has('sales.all')||baseRole(state.user)==='bko'},
-  {id:'new-sale',label:'Nova venda',icon:'＋',permission:'sales.create'},
-  {id:'bko',label:'Gestão BKO',icon:'◎',permission:'workflow.bko'},
+  {id:'sales',label:'Todas as vendas',icon:'sales',test:()=>has('sales.own')||has('sales.all')||baseRole(state.user)==='bko'},
+  {id:'new-sale',label:'Nova venda',icon:'plus',permission:'sales.create'},
+  {id:'bko',label:'Gestão BKO',icon:'briefcase',permission:'workflow.bko'},
 ];
 
 const genericOperationIds = [
@@ -327,43 +462,51 @@ const genericOperationIds = [
   'projects','deliverables','vacancies','candidates','interviews'
 ];
 const genericOperationItems = genericOperationIds.map(id=>({
-  id,label:id.replaceAll('_',' '),icon:'◇',test:()=>has(`${id}.view`)||has(`${id}.manage`)
+  id,label:id.replaceAll('_',' '),icon:'module',test:()=>has(`${id}.view`)||has(`${id}.manage`)
 }));
 const financeNavigationItems = [
-  {id:'cash',label:'Caixa',icon:'¤',permission:'cash.view'},
-  {id:'accounts_payable',label:'Contas a pagar',icon:'↓',test:()=>has('accounts_payable.view')||has('accounts_payable.manage')},
-  {id:'accounts_receivable',label:'Contas a receber',icon:'↑',test:()=>has('accounts_receivable.view')||has('accounts_receivable.manage')},
+  {id:'cash',label:'Caixa',icon:'wallet',permission:'cash.view'},
+  {id:'accounts_payable',label:'Contas a pagar',icon:'wallet',test:()=>has('accounts_payable.view')||has('accounts_payable.manage')},
+  {id:'accounts_receivable',label:'Contas a receber',icon:'wallet',test:()=>has('accounts_receivable.view')||has('accounts_receivable.manage')},
 ];
 
 const productivityNavigationItems = [
-  {id:'work-center',label:'Central de produtividade',icon:'✓',test:()=>has('tasks.view')||has('tasks.manage')||has('reports.manage')},
+  {id:'work-center',label:'Central de produtividade',icon:'checkSquare',test:()=>has('tasks.view')||has('tasks.manage')||has('reports.manage')},
+];
+
+const insightsNavigationItems = [
+  {id:'daily',label:'Análise do dia',icon:'analytics',permission:'daily.view'},
+  {id:'ranking',label:'Ranking',icon:'ranking',test:()=>has('ranking.own')||has('ranking.all')},
+  {id:'powerbi',label:'Power BI',icon:'chart',permission:'powerbi.view'},
+  {id:'intelligence',label:'Inteligência',icon:'sparkles',permission:'intelligence.view'},
+];
+
+const platformNavigationItems = [
+  {id:'profiles',label:'Perfis',icon:'grid',test:()=>isPlatformOwner()},
+  {id:'platform-access',label:'Acessos da Plataforma',icon:'shield',test:()=>isPlatformOwner()},
 ];
 
 const administrativeNavigationItems = [
-  {id:'profile-settings',label:'Perfil atual',icon:'◈',test:()=>isPlatformOwner()||has('profile.view')},
-  {id:'users',label:'Funcionários',icon:'♙',permission:'users.view'},
-  {id:'teams',label:'Equipes',icon:'◫',test:()=>has('teams.view')||has('teams.manage')},
-  {id:'plans',label:'Planos e serviços',icon:'▱',test:()=>has('plans.view')||has('plans.manage')},
-  {id:'catalogs',label:'Catálogos',icon:'⚙',test:()=>has('catalogs.view')||has('catalogs.manage')},
-  {id:'roles',label:'Cargos e permissões',icon:'⌘',test:()=>has('roles.view')||has('roles.manage')},
-  {id:'audit',label:'Auditoria',icon:'◷',permission:'audit.view'},
-  {id:'backups',label:'Backups',icon:'⇩',test:()=>isPlatformOwner()},
-  {id:'integrations',label:'Integrações',icon:'⌁',test:()=>has('integrations.view')||has('integrations.manage')},
+  {id:'profile-settings',label:'Perfil atual',icon:'user',test:()=>isPlatformOwner()||has('profile.view')},
+  {id:'users',label:'Funcionários',icon:'users',permission:'users.view'},
+  {id:'teams',label:'Equipes',icon:'team',test:()=>has('teams.view')||has('teams.manage')},
+  {id:'plans',label:'Planos e serviços',icon:'package',test:()=>has('plans.view')||has('plans.manage')},
+  {id:'catalogs',label:'Catálogos',icon:'catalog',test:()=>has('catalogs.view')||has('catalogs.manage')},
+  {id:'roles',label:'Cargos e permissões',icon:'key',test:()=>has('roles.view')||has('roles.manage')},
+  {id:'audit',label:'Auditoria',icon:'history',permission:'audit.view'},
+  {id:'backups',label:'Backups',icon:'database',test:()=>isPlatformOwner()},
+  {id:'integrations',label:'Integrações',icon:'link',test:()=>has('integrations.view')||has('integrations.manage')},
 ];
 
 const navigationItems = [
-  {id:'profiles',label:'Perfis',icon:'▦',test:()=>isPlatformOwner()},
-  {id:'platform-access',label:'Acessos da Plataforma',icon:'♛',test:()=>isPlatformOwner()},
-  {id:'dashboard',label:'Dashboard',icon:'⌂',permission:'dashboard.view'},
-  {id:'sales-group',label:'Vendas',icon:'▤',children:salesNavigationItems},
-  {id:'operation-group',label:'Operação',icon:'◆',children:genericOperationItems},
-  {id:'finance-group',label:'Financeiro',icon:'¤',children:financeNavigationItems},
-  {id:'daily',label:'Análise do dia',icon:'↗',permission:'daily.view'},
-  {id:'powerbi',label:'Power BI',icon:'▥',permission:'powerbi.view'},
-  {id:'ranking',label:'Ranking',icon:'◇',test:()=>has('ranking.own')||has('ranking.all')},
-  {id:'intelligence',label:'Inteligência',icon:'✦',permission:'intelligence.view'},
-  {id:'productivity-group',label:'Produtividade',icon:'✓',children:productivityNavigationItems},
-  {id:'administrative-group',label:'Administrativo',icon:'⚙',children:administrativeNavigationItems},
+  {id:'dashboard',label:'Dashboard',icon:'home',permission:'dashboard.view'},
+  {id:'sales-group',label:'Vendas',icon:'sales',children:salesNavigationItems},
+  {id:'operation-group',label:'Operação',icon:'briefcase',children:genericOperationItems},
+  {id:'finance-group',label:'Financeiro',icon:'wallet',children:financeNavigationItems},
+  {id:'insights-group',label:'Análises',icon:'analytics',children:insightsNavigationItems},
+  {id:'productivity-group',label:'Produtividade',icon:'checkSquare',children:productivityNavigationItems},
+  {id:'platform-group',label:'Plataforma',icon:'shield',children:platformNavigationItems},
+  {id:'administrative-group',label:'Administrativo',icon:'settings',children:administrativeNavigationItems},
 ];
 
 function navigationItemLabel(item) {
@@ -414,7 +557,7 @@ function openNavigationPopover(button, group) {
     <div class="nav-popover-head"><span>${esc(navigationItemLabel(group))}</span><small>${children.length} opção(ões)</small></div>
     <div class="nav-popover-grid">${children.map(item => `
       <button class="nav-popover-item" type="button" data-popover-route="${item.id}" role="menuitem">
-        <span class="nav-popover-icon">${item.icon}</span>
+        <span class="nav-popover-icon">${uiIcon(item.icon,17)}</span>
         <span><strong>${esc(navigationItemLabel(item))}</strong><small>${esc(navigationDescription(item))}</small></span>
       </button>`).join('')}</div>`;
   document.body.appendChild(popover);
@@ -439,7 +582,7 @@ function renderContextSubnav(active) {
   container.classList.remove('hidden');
   container.innerHTML = `<span class="context-subnav-label">${esc(navigationItemLabel(group))}</span>${children.map(item => `
     <button class="context-subnav-item ${active===item.id?'active':''}" type="button" data-context-route="${item.id}" ${active===item.id?'aria-current="page"':''}>
-      <span>${item.icon}</span>${esc(navigationItemLabel(item))}
+      <span>${uiIcon(item.icon,14)}</span>${esc(navigationItemLabel(item))}
     </button>`).join('')}`;
   $$('[data-context-route]',container).forEach(button=>button.addEventListener('click',()=>navigate(button.dataset.contextRoute)));
   requestAnimationFrame(()=>container.querySelector('.context-subnav-item.active')?.scrollIntoView({block:'nearest',inline:'center'}));
@@ -455,7 +598,7 @@ function renderTopMenu(active) {
     return `<button class="top-nav-item ${activeItem?'active':''} ${grouped?'has-children':''}" type="button"
       ${grouped?`data-nav-group="${item.id}" aria-haspopup="menu" aria-expanded="false"`:`data-top-route="${item.id}"`}
       ${activeItem?'aria-current="page"':''}>
-      <span class="top-nav-icon">${item.icon}</span><span>${esc(navigationItemLabel(item))}</span>${grouped?'<span class="nav-chevron">⌄</span>':''}
+      <span class="top-nav-icon">${uiIcon(item.icon,15)}</span><span>${esc(navigationItemLabel(item))}</span>${grouped?`<span class="nav-chevron">${uiIcon('chevronDown',13)}</span>`:''}
     </button>`;
   }).join('');
   $$('[data-top-route]',container).forEach(button=>button.addEventListener('click',()=>navigate(button.dataset.topRoute)));
@@ -529,7 +672,7 @@ async function boot() {
     if (data.authenticated) {
       state.user = data.user;
       state.csrf = data.csrf_token;
-      applyTheme(state.user.theme_preference || localStorage.getItem('one-crm-theme') || 'dark');
+      applyUserAppearance(state.user);
       showApp();
     } else {
       showAuth(data.setup_required, data.setup_token_required);
@@ -598,7 +741,8 @@ function refreshUserUi() {
           state.user = bootData.user; state.csrf = bootData.csrf_token;
           state.catalogs={};state.plans=[];state.users=[];state.teams=[];state.roles=[];state.baseRoles=[];state.cashTransactions=[];
           state.profiles = state.user.profiles || [];
-  refreshUserUi();
+          applyUserAppearance(state.user);
+          refreshUserUi();
           navigate('dashboard');
           await renderRoute();
           toast(`Perfil alterado para ${state.user.profile.name}.`);
@@ -613,7 +757,7 @@ function refreshUserUi() {
 function showApp() {
   $('#auth-screen').classList.add('hidden');
   $('#app-shell').classList.remove('hidden');
-  applyTheme(state.user.theme_preference || localStorage.getItem('one-crm-theme') || 'dark');
+  applyUserAppearance(state.user);
   refreshUserUi();
   if (!location.hash) location.hash = '#/dashboard';
   renderRoute();
@@ -628,7 +772,7 @@ $('#setup-form').addEventListener('submit', async event => {
     state.csrf = data.csrf_token;
     const bootData = await api('/api/bootstrap');
     state.user = bootData.user; state.csrf = bootData.csrf_token;
-    applyTheme(state.user.theme_preference || 'dark');
+    applyUserAppearance(state.user);
     showApp(); toast('Primeiro Dono criado.');
   } catch(error) { toast(error.message,'error'); }
   finally { button.disabled = false; }
@@ -712,13 +856,147 @@ function openGlobalSearch() {
   $('#global-search-form').addEventListener('submit',e=>{e.preventDefault();const value=new FormData(e.currentTarget).get('search');closeModal();navigate('sales',qs({search:value}));});
 }
 
+function dashboardViewStorageKey(){
+  return `onecrm:dashboard-view:${activeProfile()?.id||0}:${state.user?.id||0}`;
+}
+
+function dashboardViewScopeLabel(view){
+  return view?.owner_user_id ? 'Visão pessoal' : 'Compartilhada com o perfil';
+}
+
+function resolveDashboardView(views){
+  const stored=localStorage.getItem(dashboardViewStorageKey());
+  if(stored==='system') return null;
+  if(stored){
+    const selected=views.find(view=>String(view.id)===String(stored));
+    if(selected) return selected;
+  }
+  const personalDefault=views.find(view=>view.is_default&&Number(view.owner_user_id||0)===Number(state.user?.id||0));
+  const sharedDefault=views.find(view=>view.is_default&&!view.owner_user_id);
+  return personalDefault||sharedDefault||null;
+}
+
+function dashboardViewBarHtml(views,selectedView){
+  if(!views.length&&!has('reports.manage')) return '';
+  return `<section class="dashboard-viewbar">
+    <div class="dashboard-viewbar-copy"><span class="dashboard-viewbar-icon">${uiIcon('grid',16)}</span><div><strong>Visão da dashboard</strong><small>${selectedView?`${esc(selectedView.name)} · ${esc(dashboardViewScopeLabel(selectedView))}`:'Dashboard padrão do sistema'}</small></div></div>
+    <div class="dashboard-viewbar-actions">
+      <label class="dashboard-view-select"><span>Visão</span><select id="dashboard-view-select"><option value="system" ${selectedView?'':'selected'}>Padrão do sistema</option>${views.map(view=>`<option value="${view.id}" ${Number(selectedView?.id)===Number(view.id)?'selected':''}>${esc(view.name)}${view.is_default?' · padrão':''}</option>`).join('')}</select></label>
+      ${selectedView&&has('reports.manage')?'<button type="button" class="btn small" id="dashboard-edit-view">Editar visão</button>':''}
+      ${has('reports.manage')?'<button type="button" class="btn small primary" id="dashboard-new-view">＋ Nova visão</button>':''}
+    </div>
+  </section>`;
+}
+
+function bindDashboardViewControls(views,selectedView){
+  state.productivityDashboards=views||[];
+  $('#dashboard-view-select')?.addEventListener('change',event=>{
+    localStorage.setItem(dashboardViewStorageKey(),String(event.currentTarget.value||'system'));
+    renderDashboard();
+  });
+  $('#dashboard-edit-view')?.addEventListener('click',()=>openDashboardViewForm(Number(selectedView?.id||0)));
+  $('#dashboard-new-view')?.addEventListener('click',()=>openDashboardViewForm());
+}
+
+function dashboardSummaryWidgetHtml(data){
+  if(data.profile_type==='cash_control'){
+    const c=data.cash||{};
+    return `<section class="dashboard-widget dashboard-widget-wide"><header class="dashboard-widget-head"><div><span>RESUMO</span><h3>Indicadores financeiros</h3></div><small>Perfil atual</small></header><div class="dashboard-widget-body"><div class="custom-dashboard-metrics custom-dashboard-metrics-3">
+      <article class="mini-stat"><span>Entradas</span><strong>${money(c.entries)}</strong><small>${money(c.month_entries)} neste mês</small></article>
+      <article class="mini-stat"><span>Saídas</span><strong>${money(c.exits)}</strong><small>${money(c.month_exits)} neste mês</small></article>
+      <article class="mini-stat"><span>Saldo</span><strong>${money(c.balance)}</strong><small>Entradas menos saídas</small></article>
+    </div></div></section>`;
+  }
+  if(data.generic){
+    const cards=data.cards||[];
+    return `<section class="dashboard-widget dashboard-widget-wide"><header class="dashboard-widget-head"><div><span>RESUMO</span><h3>${esc(data.preset?.operation_group_label||'Indicadores do perfil')}</h3></div><small>${cards.length} indicador(es)</small></header><div class="dashboard-widget-body"><div class="custom-dashboard-metrics">${cards.length?cards.map(card=>`<article class="mini-stat"><span>${esc(card.label)}</span><strong>${Number(card.total||0)}</strong><small>${card.overdue?`${card.overdue} prazo(s) vencido(s)`:card.amount?money(card.amount):'Registros ativos'}</small></article>`).join(''):'<div class="empty compact-empty">Sem indicadores disponíveis.</div>'}</div></div></section>`;
+  }
+  const c=data.cards||{};
+  const conversion=c.total?Math.round(c.installed*100/c.total):0;
+  const cards=[
+    ['Vendas totais',c.total||0,`${c.today||0} hoje`],['Instaladas',c.installed||0,`${conversion}% de conversão`],
+    ['Em tratamento',c.treatment||0,'Precisam de acompanhamento'],['Agenda hoje',c.agenda_today||0,fmtDate(new Date().toISOString())],
+    ['Biometria concluída',c.biometric_ok||0,`${c.biometric_pending||0} pendente(s)`],['Canceladas',c.cancelled||0,c.total?`${Math.round((c.cancelled||0)*100/c.total)}% do total`:'0%']
+  ];
+  return `<section class="dashboard-widget dashboard-widget-wide"><header class="dashboard-widget-head"><div><span>RESUMO</span><h3>Indicadores principais</h3></div><small>Atualizado agora</small></header><div class="dashboard-widget-body"><div class="custom-dashboard-metrics">${cards.map(([label,value,note])=>`<article class="mini-stat"><span>${esc(label)}</span><strong>${value}</strong><small>${esc(note)}</small></article>`).join('')}</div></div></section>`;
+}
+
+function dashboardUnavailableWidget(title,message){
+  return `<section class="dashboard-widget"><header class="dashboard-widget-head"><div><span>INDISPONÍVEL</span><h3>${esc(title)}</h3></div></header><div class="dashboard-widget-body"><div class="dashboard-widget-empty">${esc(message)}</div></div></section>`;
+}
+
+function dashboardTasksWidgetHtml(taskData){
+  if(!taskData) return dashboardUnavailableWidget('Tarefas','Seu cargo não possui acesso às tarefas deste perfil.');
+  const tasks=taskData.tasks||[]; const open=tasks.filter(item=>item.status!=='done'); const overdue=open.filter(item=>item.overdue);
+  return `<section class="dashboard-widget"><header class="dashboard-widget-head"><div><span>PRODUTIVIDADE</span><h3>Tarefas</h3></div><div class="dashboard-widget-count"><strong>${open.length}</strong><small>abertas${overdue.length?` · ${overdue.length} atrasada(s)`:''}</small></div></header><div class="dashboard-widget-body"><div class="dashboard-compact-list">${open.slice(0,6).map(task=>`<article><div><strong>${esc(task.title)}</strong><small>${esc(task.assigned_name||'Sem responsável')} · ${fmtDateTime(task.due_at)}</small></div>${badge(task.overdue?'Atrasada':(productivityStatusLabels[task.status]||task.status),task.overdue?'red':'cyan')}</article>`).join('')||'<div class="dashboard-widget-empty">Nenhuma tarefa aberta.</div>'}</div></div><footer class="dashboard-widget-foot"><button type="button" class="btn small ghost" data-route="work-center">Abrir produtividade</button></footer></section>`;
+}
+
+function dashboardNotificationsWidgetHtml(notificationData){
+  const notifications=notificationData?.notifications||[];
+  return `<section class="dashboard-widget"><header class="dashboard-widget-head"><div><span>ATIVIDADE</span><h3>Notificações</h3></div><div class="dashboard-widget-count"><strong>${Number(notificationData?.unread||0)}</strong><small>não lidas</small></div></header><div class="dashboard-widget-body"><div class="dashboard-compact-list">${notifications.slice(0,6).map(item=>`<article class="${item.read_at?'':'is-unread'}"><div><strong>${esc(item.title)}</strong><small>${esc(item.message)} · ${fmtDateTime(item.created_at)}</small></div></article>`).join('')||'<div class="dashboard-widget-empty">Nenhuma notificação.</div>'}</div></div><footer class="dashboard-widget-foot"><button type="button" class="btn small ghost" data-route="work-center">Ver central</button></footer></section>`;
+}
+
+function dashboardAutomationsWidgetHtml(automationData){
+  if(!automationData) return dashboardUnavailableWidget('Automações','Seu cargo não possui permissão para visualizar as regras automáticas.');
+  const rules=automationData.rules||[]; const active=rules.filter(item=>item.active);
+  return `<section class="dashboard-widget"><header class="dashboard-widget-head"><div><span>AUTOMAÇÃO</span><h3>Regras automáticas</h3></div><div class="dashboard-widget-count"><strong>${active.length}</strong><small>ativas</small></div></header><div class="dashboard-widget-body"><div class="dashboard-compact-list">${rules.slice(0,6).map(rule=>`<article><div><strong>${esc(rule.name)}</strong><small>${esc(productivityTriggerLabel(rule.trigger_event))}${rule.last_run_at?` · ${fmtDateTime(rule.last_run_at)}`:' · ainda não executada'}</small></div>${rule.active?badge('Ativa','green'):badge('Inativa','red')}</article>`).join('')||'<div class="dashboard-widget-empty">Nenhuma automação configurada.</div>'}</div></div><footer class="dashboard-widget-foot"><button type="button" class="btn small ghost" data-route="work-center">Gerenciar regras</button></footer></section>`;
+}
+
+function dashboardFormsWidgetHtml(formData){
+  if(!formData) return dashboardUnavailableWidget('Formulários','Seu cargo não possui permissão para visualizar formulários personalizados.');
+  const forms=formData.forms||[];
+  return `<section class="dashboard-widget"><header class="dashboard-widget-head"><div><span>FORMULÁRIOS</span><h3>Formulários personalizados</h3></div><div class="dashboard-widget-count"><strong>${forms.length}</strong><small>cadastrados</small></div></header><div class="dashboard-widget-body"><div class="dashboard-compact-list">${forms.slice(0,6).map(form=>`<article><div><strong>${esc(form.name)}</strong><small>${(form.schema||[]).length} campo(s) · ${Number(form.entries_count||0)} envio(s)</small></div>${form.active?badge('Ativo','green'):badge('Inativo','red')}</article>`).join('')||'<div class="dashboard-widget-empty">Nenhum formulário cadastrado.</div>'}</div></div><footer class="dashboard-widget-foot"><button type="button" class="btn small ghost" data-route="work-center">Gerenciar formulários</button></footer></section>`;
+}
+
+function dashboardSecurityWidgetHtml(alertData){
+  if(!alertData) return dashboardUnavailableWidget('Segurança','Seu cargo não possui acesso aos alertas de segurança.');
+  const alerts=(alertData.alerts||[]).filter(item=>!item.resolved_at);
+  return `<section class="dashboard-widget"><header class="dashboard-widget-head"><div><span>SEGURANÇA</span><h3>Alertas em aberto</h3></div><div class="dashboard-widget-count"><strong>${alerts.length}</strong><small>pendentes</small></div></header><div class="dashboard-widget-body"><div class="dashboard-compact-list">${alerts.slice(0,6).map(alert=>`<article><div><strong>${esc(alert.title)}</strong><small>${esc(alert.alert_type)} · ${fmtDateTime(alert.created_at)}</small></div>${badge(alert.severity||'info',alert.severity==='critical'||alert.severity==='high'?'red':alert.severity==='medium'?'amber':'cyan')}</article>`).join('')||'<div class="dashboard-widget-empty">Nenhum alerta de segurança em aberto.</div>'}</div></div><footer class="dashboard-widget-foot"><button type="button" class="btn small ghost" data-route="work-center">Abrir central</button></footer></section>`;
+}
+
+async function renderConfiguredDashboard(data,view,views,visibleName){
+  const widgets=new Set(view?.config?.widgets||[]);
+  const [taskData,notificationData,automationData,formData,alertData]=await Promise.all([
+    widgets.has('tasks')&&has('tasks.view')?api('/api/tasks').catch(()=>null):Promise.resolve(null),
+    widgets.has('notifications')?api('/api/notifications').catch(()=>({notifications:[],unread:0})):Promise.resolve(null),
+    widgets.has('automations')&&has('automations.manage')?api('/api/automations').catch(()=>null):Promise.resolve(null),
+    widgets.has('forms')&&has('forms.manage')?api('/api/custom-forms').catch(()=>null):Promise.resolve(null),
+    widgets.has('security')&&has('security.alerts')?api('/api/security-alerts').catch(()=>null):Promise.resolve(null),
+  ]);
+  const widgetHtml=[];
+  for(const code of (view?.config?.widgets||[])){
+    if(code==='summary') widgetHtml.push(dashboardSummaryWidgetHtml(data));
+    else if(code==='tasks') widgetHtml.push(dashboardTasksWidgetHtml(taskData));
+    else if(code==='notifications') widgetHtml.push(dashboardNotificationsWidgetHtml(notificationData));
+    else if(code==='automations') widgetHtml.push(dashboardAutomationsWidgetHtml(automationData));
+    else if(code==='forms') widgetHtml.push(dashboardFormsWidgetHtml(formData));
+    else if(code==='security') widgetHtml.push(dashboardSecurityWidgetHtml(alertData));
+  }
+  $('#content').innerHTML=`
+    ${dashboardViewBarHtml(views,view)}
+    <section class="dashboard-hero dashboard-custom-hero"><div><p class="eyebrow">DASHBOARD</p><h1>${esc(view.name)}</h1><p>${esc(dashboardViewScopeLabel(view))} · ${esc(activeProfile().name||'Perfil atual')}</p></div><div class="dashboard-hero-actions"><button type="button" class="btn" data-route="work-center">${uiIcon('settings',14)}<span>Configurar visão</span></button></div></section>
+    <section class="custom-dashboard-grid">${widgetHtml.join('')||'<section class="dashboard-widget dashboard-widget-wide"><div class="dashboard-widget-empty">Esta visão não possui widgets configurados.</div></section>'}</section>`;
+  bindDashboardViewControls(views,view);
+}
+
 async function renderDashboard() {
   setPage('Dashboard', activeProfile().name ? activeProfile().name.toUpperCase() : 'CENTRAL DE OPERAÇÃO');
-  const data = await api('/api/dashboard');
-  const visibleName = state.user.display_name || state.user.name;
+  const [data,viewsResult]=await Promise.all([
+    api('/api/dashboard'),
+    api('/api/custom-dashboards').catch(()=>({dashboards:[]})),
+  ]);
+  const views=viewsResult.dashboards||[];
+  state.productivityDashboards=views;
+  const selectedView=resolveDashboardView(views);
+  const visibleName=state.user.display_name||state.user.name;
+  if(selectedView){
+    await renderConfiguredDashboard(data,selectedView,views,visibleName);
+    return;
+  }
+  const viewBar=dashboardViewBarHtml(views,null);
   if (data.profile_type === 'cash_control') {
     const c = data.cash;
-    $('#content').innerHTML = `
+    $('#content').innerHTML = `${viewBar}
       <section class="dashboard-hero"><div><p class="eyebrow">CONTROLE FINANCEIRO</p><h1>Olá, ${esc(visibleName)}</h1><p>Saldo e movimentações do perfil ${esc(activeProfile().name||'')}.</p></div><div class="dashboard-hero-actions"><button class="btn primary" id="dashboard-new-cash">＋ Novo lançamento</button><button class="btn" id="dashboard-view-cash">Abrir caixa</button></div></section>
       <section class="dashboard-metrics">
         <article class="stat-card compact" style="--accent:var(--green)"><div class="stat-top"><span>Entradas totais</span><span class="stat-icon">＋</span></div><div class="stat-value">${money(c.entries)}</div><div class="stat-note">${money(c.month_entries)} neste mês</div></article>
@@ -726,6 +1004,7 @@ async function renderDashboard() {
         <article class="stat-card compact" style="--accent:var(--cyan)"><div class="stat-top"><span>Saldo atual</span><span class="stat-icon">¤</span></div><div class="stat-value">${money(c.balance)}</div><div class="stat-note">Entradas menos saídas</div></article>
       </section>
       <section class="panel"><header class="panel-head"><div><h3>Movimentações recentes</h3><small class="muted">Últimos lançamentos do perfil</small></div><button class="btn small" id="cash-open-all">Ver caixa</button></header>${cashTable(data.recent_transactions||[])}</section>`;
+    bindDashboardViewControls(views,null);
     $('#dashboard-new-cash')?.addEventListener('click',()=>openCashForm());
     $('#dashboard-view-cash')?.addEventListener('click',()=>navigate('cash'));
     $('#cash-open-all')?.addEventListener('click',()=>navigate('cash'));
@@ -735,30 +1014,81 @@ async function renderDashboard() {
     const cards = data.cards || [];
     const recent = data.recent || [];
     const operationLabel = data.preset?.operation_group_label || 'Operação';
-    $('#content').innerHTML = `
+    $('#content').innerHTML = `${viewBar}
       <section class="dashboard-hero"><div><p class="eyebrow">${esc(String(operationLabel).toUpperCase())}</p><h1>Olá, ${esc(visibleName)}</h1><p>Resumo do perfil ${esc(activeProfile().name||'')} sem indicadores de outros segmentos.</p></div></section>
       <section class="dashboard-metrics">${cards.length ? cards.map(card=>`<article class="stat-card compact" style="--accent:var(--cyan)"><div class="stat-top"><span>${esc(card.label)}</span><span class="stat-icon">◇</span></div><div class="stat-value">${card.total}</div><div class="stat-note">${card.overdue?`${card.overdue} prazo(s) vencido(s)`:card.amount?money(card.amount):'Registros ativos'}</div><button type="button" class="metric-link" data-route="${esc(card.module)}">Abrir módulo</button></article>`).join('') : '<article class="stat-card compact"><div class="stat-note">Este perfil ainda não possui registros operacionais.</div></article>'}</section>
       <section class="panel"><header class="panel-head"><div><h3>Atualizações recentes</h3><small class="muted">Movimentações dos módulos deste preset</small></div></header>${genericRecordTable(recent,{compact:true})}</section>`;
+    bindDashboardViewControls(views,null);
     return;
   }
   const c = data.cards;
   const conversion = c.total ? Math.round(c.installed * 100 / c.total) : 0;
-  const cards = [
-    ['Vendas totais',c.total,`${c.today} cadastrada(s) hoje`,'▤','--cyan'],
-    ['Instaladas',c.installed,`${conversion}% de conversão`,'✓','--green'],
-    ['Em tratamento',c.treatment,'Precisam de acompanhamento','◷','--amber'],
-    ['Agenda de hoje',c.agenda_today,fmtDate(new Date().toISOString()),'▦','--blue'],
-    ['Biometria concluída',c.biometric_ok,`${c.biometric_pending} pendente(s)`,'◉','--violet'],
-    ['Canceladas',c.cancelled,c.total ? `${Math.round(c.cancelled*100/c.total)}% do total` : '0%','×','--red'],
+  const cancellationRate = c.total ? Math.round(c.cancelled * 100 / c.total) : 0;
+  const followups = [
+    ['clock','Em tratamento',c.treatment,'Precisam de acompanhamento'],
+    ['calendar','Agenda de hoje',c.agenda_today,dashboardTodayLabel()],
+    ['fingerprint','Biometria pendente',c.biometric_pending,'Aguardando conclusão'],
+    ['xCircle','Canceladas',c.cancelled,`${cancellationRate}% do total`],
   ];
-  $('#content').innerHTML = `
-    <section class="dashboard-hero">
-      <div><p class="eyebrow">PAINEL PRINCIPAL</p><h1>Olá, ${esc(visibleName)}</h1><p>Indicadores do perfil ${esc(activeProfile().name||'')}.</p></div>
-      <div class="dashboard-hero-actions">${has('sales.create')?'<button class="btn primary" id="dashboard-new-sale">＋ Nova venda</button>':''}<button class="btn" id="dashboard-view-sales">Ver vendas</button></div>
+  $('#content').innerHTML = `${viewBar}
+    <section class="dashboard-intro">
+      <div class="dashboard-intro-copy">
+        <span class="dashboard-context-label">${esc(activeProfile().name||'Operação principal')}</span>
+        <h1>${dashboardGreeting()}, ${esc(visibleName)}</h1>
+        <p>${esc(dashboardTodayLabel())}</p>
+      </div>
+      <div class="dashboard-intro-actions">
+        ${has('sales.create')?`<button class="btn primary" id="dashboard-new-sale">${uiIcon('plus',15)}<span>Nova venda</span></button>`:''}
+        <button class="btn" id="dashboard-view-sales">${uiIcon('eye',15)}<span>Ver vendas</span></button>
+      </div>
     </section>
-    <section class="dashboard-metrics" aria-label="Indicadores principais">${cards.map(([title,value,note,icon,color])=>`<article class="stat-card compact" style="--accent:var(${color})"><div class="stat-top"><span>${title}</span><span class="stat-icon">${icon}</span></div><div class="stat-value">${value}</div><div class="stat-note">${note}</div></article>`).join('')}</section>
+
+    <section class="dashboard-overview" aria-label="Resumo da operação">
+      <article class="dashboard-sales-summary">
+        <header class="dashboard-section-header">
+          <div><span>Desempenho comercial</span><small>Visão consolidada do perfil</small></div>
+          <span class="dashboard-section-meta">${c.today} venda(s) hoje</span>
+        </header>
+        <div class="dashboard-sales-core">
+          <div class="dashboard-sales-total">
+            <span>Vendas totais</span>
+            <strong>${c.total}</strong>
+            <small>${c.today ? `+${c.today} registradas hoje` : 'Nenhuma venda registrada hoje'}</small>
+          </div>
+          <div class="dashboard-sales-kpi">
+            <span>Instaladas</span>
+            <strong>${c.installed}</strong>
+            <small>concluídas</small>
+          </div>
+          <div class="dashboard-sales-kpi">
+            <span>Conversão</span>
+            <strong>${conversion}%</strong>
+            <small>vendas instaladas</small>
+          </div>
+        </div>
+        <div class="dashboard-conversion">
+          <div><span>Progresso de instalação</span><strong>${conversion}%</strong></div>
+          <div class="dashboard-conversion-track"><span style="width:${Math.max(0,Math.min(100,conversion))}%"></span></div>
+        </div>
+      </article>
+
+      <article class="dashboard-followup">
+        <header class="dashboard-section-header">
+          <div><span>Acompanhamento</span><small>Itens que pedem atenção operacional</small></div>
+        </header>
+        <div class="dashboard-followup-list">
+          ${followups.map(([icon,label,value,note])=>`<div class="dashboard-followup-row">
+            <span class="dashboard-followup-icon">${uiIcon(icon,16)}</span>
+            <div><strong>${esc(label)}</strong><small>${esc(note)}</small></div>
+            <b>${Number(value||0)}</b>
+          </div>`).join('')}
+        </div>
+      </article>
+    </section>
+
     <section class="panel dashboard-recent"><header class="panel-head"><div><h3>Vendas recentes</h3><small class="muted">Últimas movimentações do perfil atual</small></div><button type="button" class="btn small" data-route="sales">Ver todas</button></header>${salesTable(data.recent)}</section>
     ${data.teams?.length ? `<section class="panel"><header class="panel-head"><div><h3>Desempenho das equipes</h3><small class="muted">Comparação rápida do dia</small></div><button type="button" class="btn small ghost" data-route="daily">Análise completa</button></header><div class="panel-body dashboard-teams">${data.teams.map(t=>`<article class="team-card"><h4>${esc(t.team_name)}</h4><div class="metric-row"><span>Hoje</span><strong>${t.today}</strong></div><div class="metric-row"><span>Total</span><strong>${t.total}</strong></div><div class="metric-row"><span>Instaladas</span><strong>${t.installed}</strong></div></article>`).join('')}</div></section>`:''}`;
+  bindDashboardViewControls(views,null);
   $('#dashboard-new-sale')?.addEventListener('click',()=>openSaleForm(null,true));
   $('#dashboard-view-sales')?.addEventListener('click',()=>navigate('sales'));
   bindSaleRows();
@@ -1936,10 +2266,19 @@ async function renderAccount() {
         </form>
       </div></section>
       <div class="profile-side">
-        <section class="panel"><header class="panel-head"><h3>Aparência</h3></header><div class="panel-body"><p class="muted">Escolha como o ONE CRM será exibido nesta conta.</p><div class="theme-choice" role="group" aria-label="Tema">
-          <button class="theme-card ${currentTheme()==='dark'?'active':''}" data-theme-choice="dark" type="button"><span>☾</span><strong>Escuro</strong><small>Menos brilho, mais foco</small></button>
-          <button class="theme-card ${currentTheme()==='light'?'active':''}" data-theme-choice="light" type="button"><span>☀</span><strong>Claro</strong><small>Melhor em ambientes iluminados</small></button>
-        </div></div></section>
+        <section class="panel appearance-panel"><header class="panel-head"><div><h3>Aparência</h3><small class="muted">Personalização salva somente para sua conta.</small></div></header><div class="panel-body">
+          <div class="appearance-group"><div class="appearance-group-head"><strong>Tema</strong><small>Claro ou escuro</small></div><div class="theme-choice" role="group" aria-label="Tema">
+            <button class="theme-card ${currentTheme()==='dark'?'active':''}" data-theme-choice="dark" type="button"><span>☾</span><strong>Escuro</strong><small>Contraste alto</small></button>
+            <button class="theme-card ${currentTheme()==='light'?'active':''}" data-theme-choice="light" type="button"><span>☀</span><strong>Claro</strong><small>Ambientes iluminados</small></button>
+          </div></div>
+          <div class="appearance-group"><div class="appearance-group-head"><strong>Cor de destaque</strong><small>Menus, botões, foco e brilho neon</small></div>
+            <div class="accent-choice" role="group" aria-label="Cor de destaque">${Object.entries(accentPresets).map(([code,item])=>`<button type="button" class="accent-swatch ${currentAccent()===code?'active':''}" data-accent-choice="${code}" title="${esc(item.label)}" aria-label="${esc(item.label)}"><i style="--swatch:${item.hex}"></i><span>${esc(item.label)}</span></button>`).join('')}</div>
+            <label class="custom-accent-row"><span><strong>Cor personalizada</strong><small>Escolha qualquer cor hexadecimal</small></span><input id="custom-accent-picker" type="color" value="${esc(accentPresets[currentAccent()]?.hex || currentAccent())}" aria-label="Cor personalizada"></label>
+          </div>
+          <div class="appearance-group"><div class="appearance-group-head"><strong>Fundo do modo escuro</strong><small>Altera apenas as superfícies neutras</small></div>
+            <div class="background-choice" role="group" aria-label="Fundo escuro">${Object.entries(backgroundPresets).map(([code,item])=>`<button type="button" class="background-swatch ${currentBackground()===code?'active':''}" data-background-choice="${code}"><i class="background-preview ${code}"></i><span>${esc(item.label)}</span></button>`).join('')}</div>
+          </div>
+        </div></section>
         <section class="panel"><header class="panel-head"><h3>Dados de acesso</h3></header><div class="panel-body"><div class="metric-row"><span>Cargo</span><strong>${esc(u.role_name||roleLabel(u.role_code))}</strong></div><div class="metric-row"><span>Equipe</span><strong>${esc(u.team_name||'-')}</strong></div><div class="metric-row"><span>Permissões</span><strong>${u.permissions.length}</strong></div></div></section>
         <section class="panel"><header class="panel-head"><h3>Alterar senha</h3></header><div class="panel-body"><form id="password-form" class="form-stack"><label>Senha atual<input type="password" name="current_password" required autocomplete="current-password"></label><label>Nova senha<input type="password" name="new_password" required minlength="8" autocomplete="new-password"></label><button class="btn primary">Alterar senha</button></form></div></section>
       </div>
@@ -1962,9 +2301,26 @@ async function renderAccount() {
   });
   $$('[data-theme-choice]').forEach(button=>button.addEventListener('click',async()=>{
     const theme=button.dataset.themeChoice;
-    applyTheme(theme);
-    state.user.theme_preference=theme;
-    try{await api('/api/me/theme',{method:'PUT',body:{theme}});toast(`Tema ${theme==='light'?'claro':'escuro'} aplicado.`);renderAccount();}
+    applyTheme(theme);state.user.theme_preference=theme;
+    try{await saveAppearance({theme});toast(`Tema ${theme==='light'?'claro':'escuro'} aplicado.`);renderAccount();}
+    catch(error){toast(error.message,'error');}
+  }));
+  $$('[data-accent-choice]').forEach(button=>button.addEventListener('click',async()=>{
+    const accent=button.dataset.accentChoice;
+    applyAccent(accent);state.user.accent_preference=accent;
+    try{await saveAppearance({accent});toast(`Destaque ${accentPresets[accent]?.label||accent} aplicado.`);renderAccount();}
+    catch(error){toast(error.message,'error');}
+  }));
+  $('#custom-accent-picker')?.addEventListener('change',async event=>{
+    const accent=normalizeAccent(event.currentTarget.value);
+    applyAccent(accent);state.user.accent_preference=accent;
+    try{await saveAppearance({accent});toast('Cor personalizada aplicada.');renderAccount();}
+    catch(error){toast(error.message,'error');}
+  });
+  $$('[data-background-choice]').forEach(button=>button.addEventListener('click',async()=>{
+    const background=button.dataset.backgroundChoice;
+    applyBackground(background);state.user.background_preference=background;
+    try{await saveAppearance({background});toast(`Fundo ${backgroundPresets[background]?.label||background} aplicado.`);renderAccount();}
     catch(error){toast(error.message,'error');}
   }));
   $('#password-form').addEventListener('submit',async e=>{e.preventDefault();try{const r=await api('/api/me/password',{method:'PUT',body:formObject(e.currentTarget)});toast(r.message);setTimeout(()=>location.reload(),1200);}catch(error){toast(error.message,'error');}});
@@ -2203,5 +2559,5 @@ async function openDashboardViewForm(id=null){
   const selected=new Set(view?.config?.widgets||['summary','tasks','notifications']);
   modal(view?'Editar visão de dashboard':'Nova visão de dashboard',`<form id="dashboard-view-form" class="builder-form"><div class="builder-intro"><span class="builder-step">1</span><div><strong>Nome e finalidade</strong><small>Crie uma visão simples e escolha abaixo quais blocos devem aparecer.</small></div></div><div class="builder-grid"><label class="builder-span-2">Nome da visão<input name="name" required minlength="2" value="${esc(view?.name||'')}" placeholder="Ex.: Gestão diária"></label></div><section class="builder-section"><header><span class="builder-step">2</span><div><strong>Widgets</strong><small>Marque somente as informações relevantes para esta visão.</small></div></header><div class="widget-picker">${dashboardWidgetCatalog.map(widget=>`<label class="widget-choice"><input type="checkbox" name="dashboard_widget" value="${widget.code}" ${selected.has(widget.code)?'checked':''}><span><strong>${esc(widget.label)}</strong><small>${esc(widget.description)}</small></span></label>`).join('')}</div></section><div class="builder-grid"><label class="builder-switch"><span><strong>Compartilhar com o perfil</strong><small>Todos com acesso ao perfil poderão usar esta visão.</small></span><input name="shared" type="checkbox" ${view&&!view.owner_user_id?'checked':''}></label><label class="builder-switch"><span><strong>Usar como padrão</strong><small>Prioriza esta visão na lista de dashboards.</small></span><input name="is_default" type="checkbox" ${view?.is_default?'checked':''}></label></div><div class="builder-footer"><button class="btn ghost" type="button" data-close-modal>Cancelar</button><button class="btn primary" type="submit">${view?'Salvar alterações':'Salvar visão'}</button></div></form>`,{wide:true});
   const form=$('#dashboard-view-form');
-  form.addEventListener('submit',async event=>{event.preventDefault();const data=formObject(form);const widgets=$$('input[name="dashboard_widget"]:checked',form).map(input=>input.value);if(!widgets.length){toast('Escolha pelo menos um widget.','error');return;}const payload={id:view?.id,name:String(data.name||'').trim(),config:{widgets},shared:Boolean(data.shared),is_default:Boolean(data.is_default)};try{await api('/api/custom-dashboards',{method:'POST',body:payload});closeModal();toast(view?'Visão atualizada.':'Visão salva.');renderWorkCenter();}catch(error){toast(error.message,'error');}});
+  form.addEventListener('submit',async event=>{event.preventDefault();const data=formObject(form);const widgets=$$('input[name="dashboard_widget"]:checked',form).map(input=>input.value);if(!widgets.length){toast('Escolha pelo menos um widget.','error');return;}const payload={id:view?.id,name:String(data.name||'').trim(),config:{widgets},shared:Boolean(data.shared),is_default:Boolean(data.is_default)};try{const result=await api('/api/custom-dashboards',{method:'POST',body:payload});closeModal();toast(view?'Visão atualizada.':'Visão salva.');if(parseRoute().route==='dashboard'){localStorage.setItem(dashboardViewStorageKey(),String(result.id||view?.id||'system'));await renderDashboard();}else{renderWorkCenter();}}catch(error){toast(error.message,'error');}});
 }

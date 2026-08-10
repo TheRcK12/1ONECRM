@@ -1,6 +1,6 @@
 {
   "name": "ONE CRM",
-  "version": "2.6.2-beta.1",
+  "version": "2.6.6-beta.1",
   "channel": "beta-online",
-  "description": "Substitui configurações JSON por construtores visuais e reorganiza a Central de Produtividade e o cabeçalho."
+  "description": "Personalização visual por usuário: cor de destaque com neon controlado, cor customizável e fundos escuros selecionáveis."
 }

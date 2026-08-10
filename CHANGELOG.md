@@ -1,3 +1,46 @@
+# Changelog
+
+## 2.6.6-beta.1 — Aparência personalizável
+
+- Mantém neon discreto somente em foco, navegação ativa e ações principais.
+- Cor de destaque passa a ser preferência individual do usuário.
+- Inclui presets Verde neon, Ciano, Azul elétrico, Roxo, Rosa e Âmbar.
+- Permite escolher uma cor personalizada pelo seletor nativo de cor.
+- Adiciona fundos escuros Grafite, Meia-noite, Obsidiana e Floresta escura.
+- Preferências ficam persistidas no banco e reaplicadas em qualquer dispositivo após login.
+- Mantém tema claro/escuro e todas as funções da 2.6.5.
+
+## 2.6.5-beta.1 — Paleta executiva
+
+- Troca o ciano neon dominante por uma paleta grafite + azul frio mais sóbria.
+- Reduz saturação de navegação, botões, focos, builders e dashboards sem perder contraste.
+- Mantém verde, âmbar e vermelho somente como cores semânticas de estado.
+- Atualiza a identidade cromática do logo para azul aço e azul profundo.
+- Refina também o tema claro para tons neutros azulados.
+- Atualiza cache dos assets, versão do servidor e label Docker para 2.6.5-beta.1.
+
+# 2.6.3-beta.1
+
+
+## 2.6.4-beta.1 — Refinamento visual B2B
+
+- Reorganiza a navegação superior em grupos mais claros: Vendas, Análises, Produtividade, Plataforma e Administrativo.
+- Substitui símbolos Unicode de navegação por um conjunto consistente de ícones SVG internos.
+- Redesenha a Dashboard principal com hierarquia assimétrica: desempenho comercial + acompanhamento operacional, evitando seis cards idênticos.
+- Compacta cabeçalho, navegação, botões, painéis e modais para aumentar densidade útil sem prejudicar a legibilidade.
+- Remove gradientes e sombras excessivos das áreas operacionais e reduz a aparência de template genérico.
+- Mantém as dashboards personalizadas, produtividade, backups, permissões e demais funções da 2.6.3.
+- Atualiza cache dos assets, versão do servidor e label da imagem Docker para 2.6.4-beta.1.
+
+- Conecta dashboards personalizados à página Dashboard principal.
+- Adiciona seletor entre Dashboard padrão e visões pessoais/compartilhadas.
+- Visões marcadas como padrão passam a abrir automaticamente quando não existe preferência do usuário.
+- Renderiza de verdade os widgets Resumo, Tarefas, Notificações, Automações, Formulários e Segurança.
+- Usuários com `dashboard.view` podem consumir visões compartilhadas; somente `reports.manage` continua podendo criar ou editar.
+- Corrige escopo de edição de dashboards pessoais e garante apenas um padrão por escopo.
+- Formulários personalizados passam a informar quantidade de envios para uso nos widgets.
+- Atualiza cache de frontend, Docker e versão para 2.6.3-beta.1.
+
 # 2.6.2-beta.1
 
 - Substitui os campos JSON das automações por um construtor visual com gatilho, condição e múltiplas ações.
