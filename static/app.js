@@ -1825,12 +1825,22 @@ async function renderProfiles() {
   state.availableContractors = data.available_contractors || [];
   $('#content').innerHTML = `
     <div class="page-head"><div><h1>Perfis de negócio</h1><p class="muted">Cada perfil possui dados, usuários, cargos e configurações isolados.</p></div><button class="btn primary" id="new-profile">＋ Novo perfil</button></div>
-    <div class="profile-grid">${state.profiles.map(profile=>`<article class="profile-card ${profile.active?'':'inactive'}">
-      <header><div><span class="profile-type">${esc(profileTypeLabel(profile.business_type))}</span><h3>${esc(profile.name)}</h3></div>${profile.active?badge('Ativo','ok'):badge('Bloqueado','cancelada')}</header>
-      <p>${esc(profile.description||'Sem descrição.')}</p>
-      <div class="profile-metrics"><span><b>${profile.users_count||0}</b> usuários</span><span><b>${profile.modules?.length||0}</b> módulos</span></div>
-      <div class="profile-contractor"><small>Contratante</small><strong>${esc(profile.contractor_name||'Não definido')}</strong></div>
-      <footer><button class="btn small" data-profile-enter="${profile.id}">Entrar</button><button class="btn small ghost" data-profile-edit="${profile.id}">Configurar</button><button class="btn small danger" data-profile-delete="${profile.id}" ${state.profiles.length<=1?'disabled title="O único perfil da plataforma não pode ser excluído."':''}>${uiIcon('trash',13)} Excluir</button></footer>
+    <div class="business-profile-grid">${state.profiles.map(profile=>`<article class="business-profile-card ${profile.active?'':'is-blocked'}">
+      <div class="business-profile-card-head">
+        <div class="business-profile-heading"><span class="business-profile-type">${esc(profileTypeLabel(profile.business_type))}</span><h3>${esc(profile.name)}</h3></div>
+        ${profile.active?badge('Ativo','ok'):badge('Bloqueado','cancelada')}
+      </div>
+      <p class="business-profile-description">${esc(profile.description||'Sem descrição.')}</p>
+      <div class="business-profile-stats">
+        <div class="business-profile-stat"><b>${profile.users_count||0}</b><span>Usuários</span></div>
+        <div class="business-profile-stat"><b>${profile.modules?.length||0}</b><span>Módulos</span></div>
+      </div>
+      <div class="business-profile-contractor"><small>Contratante</small><strong>${esc(profile.contractor_name||'Não definido')}</strong></div>
+      <div class="business-profile-actions">
+        <button class="btn small ${profile.active?'primary':''}" data-profile-enter="${profile.id}" ${profile.active?'':'disabled title="Ative o perfil para entrar."'}>Entrar</button>
+        <button class="btn small ghost" data-profile-edit="${profile.id}">Configurar</button>
+        <button class="btn small danger business-profile-delete" data-profile-delete="${profile.id}" ${state.profiles.length<=1?'disabled title="O único perfil da plataforma não pode ser excluído."':''}>${uiIcon('trash',13)}<span>Excluir</span></button>
+      </div>
     </article>`).join('')}</div>`;
   $('#new-profile').addEventListener('click',()=>openProfileForm());
   $$('[data-profile-enter]').forEach(button=>button.addEventListener('click',()=>switchProfile(Number(button.dataset.profileEnter))));

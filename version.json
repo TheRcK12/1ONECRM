@@ -1,6 +1,6 @@
 {
   "name": "ONE CRM",
-  "version": "2.7.4-beta.1",
+  "version": "2.7.5-beta.1",
   "channel": "beta-online",
-  "description": "Exclusão segura de perfis para Donos, com confirmação nominal, backup automático, limpeza integral dos dados do perfil e proteção do último perfil."
+  "description": "Refinamento visual da gestão de perfis: cards responsivos, ações alinhadas, estados bloqueados mais claros e separação do layout do perfil pessoal."
 }

@@ -1,3 +1,13 @@
+# ONE CRM 2.7.5-beta.1
+
+## Gestão de perfis mais organizada
+- Grade de perfis separada do layout de “Meu perfil”, eliminando conflito de CSS.
+- Cards responsivos: 4 colunas em telas muito largas, 3 até 1500px, 2 até 1080px e 1 no mobile.
+- Métricas de usuários e módulos reorganizadas em blocos visuais.
+- Ações alinhadas no rodapé com hierarquia mais clara entre Entrar, Configurar e Excluir.
+- Perfis bloqueados permanecem legíveis; somente a ação Entrar fica indisponível.
+- Mantidas exclusão segura de perfis, tema escuro Obsidiana e destaque por cor personalizada.
+
 # ONE CRM 2.7.4-beta.1
 
 - Adiciona **Excluir perfil** na tela de Perfis e dentro de **Configurar perfil**.
