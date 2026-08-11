@@ -1,3 +1,10 @@
+# ONE CRM 2.7.3-beta.1
+
+- Restaura a gestão de **Perfis** para o Dono dentro de **Administrativo**.
+- Move **Acessos da Plataforma** para o mesmo agrupamento administrativo.
+- Torna a detecção de Dono resiliente a payloads/sessões legadas usando `is_platform_owner`, `platform_role_code`, `role_code` e `base_role`.
+- Mantém fundo escuro Obsidiana e destaque exclusivamente por cor personalizada.
+
 ## 2.7.2-beta.1
 - Removidos os seis presets visuais de cor de destaque da tela de Aparência.
 - A personalização de destaque agora possui uma única entrada: **Personalizar cor**.

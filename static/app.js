@@ -139,7 +139,12 @@ function dashboardTodayLabel() {
 }
 const initials = name => String(name || 'OC').split(/\s+/).slice(0,2).map(x=>x[0]).join('').toUpperCase();
 const has = permission => state.user?.is_platform_owner || baseRole(state.user) === 'owner' || state.user?.permissions?.includes(permission);
-const isPlatformOwner = () => Boolean(state.user?.is_platform_owner);
+const isPlatformOwner = () => Boolean(
+  state.user?.is_platform_owner ||
+  state.user?.platform_role_code === 'owner' ||
+  state.user?.role_code === 'owner' ||
+  state.user?.base_role === 'owner'
+);
 const isPlatformStaff = () => Boolean(state.user?.is_platform_staff);
 const isReadOnlyContractor = () => Boolean(state.user?.is_contractor && !state.user?.is_platform_owner);
 const activeProfile = () => state.user?.profile || {};
@@ -529,12 +534,9 @@ const insightsNavigationItems = [
   {id:'intelligence',label:'Inteligência',icon:'sparkles',permission:'intelligence.view'},
 ];
 
-const platformNavigationItems = [
+const administrativeNavigationItems = [
   {id:'profiles',label:'Perfis',icon:'grid',test:()=>isPlatformOwner()},
   {id:'platform-access',label:'Acessos da Plataforma',icon:'shield',test:()=>isPlatformOwner()},
-];
-
-const administrativeNavigationItems = [
   {id:'profile-settings',label:'Perfil atual',icon:'user',test:()=>isPlatformOwner()||has('profile.view')},
   {id:'users',label:'Funcionários',icon:'users',test:()=>has('users.view')||has('users.manage')},
   {id:'teams',label:'Equipes',icon:'team',test:()=>has('teams.view')||has('teams.manage')},
@@ -553,7 +555,6 @@ const navigationItems = [
   {id:'finance-group',label:'Financeiro',icon:'wallet',children:financeNavigationItems},
   {id:'insights-group',label:'Análises',icon:'analytics',children:insightsNavigationItems},
   {id:'productivity-group',label:'Produtividade',icon:'checkSquare',children:productivityNavigationItems},
-  {id:'platform-group',label:'Plataforma',icon:'shield',children:platformNavigationItems},
   {id:'administrative-group',label:'Administrativo',icon:'settings',children:administrativeNavigationItems},
 ];
 

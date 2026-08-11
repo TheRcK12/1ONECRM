@@ -6,7 +6,7 @@ CSS = (ROOT / "static" / "app.css").read_text(encoding="utf-8")
 LOGO = (ROOT / "static" / "one-crm-logo.svg").read_text(encoding="utf-8")
 VERSION = json.loads((ROOT / "version.json").read_text(encoding="utf-8"))
 
-assert VERSION["version"] == "2.7.2-beta.1"
+assert VERSION["version"] == "2.7.3-beta.1"
 assert "--bg:#0d1117" in CSS
 assert "--surface:#111821" in CSS
 assert "--cyan:#6f95c9" in CSS

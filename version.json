@@ -1,6 +1,6 @@
 {
   "name": "ONE CRM",
-  "version": "2.7.2-beta.1",
+  "version": "2.7.3-beta.1",
   "channel": "beta-online",
-  "description": "Destaque visual somente por cor personalizada HEX; presets removidos e fundo escuro mantido em Obsidiana."
+  "description": "Gestão de Perfis restaurada no menu Administrativo para Donos, com detecção robusta do cargo de Dono e personalização livre de cor."
 }

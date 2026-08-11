@@ -9,20 +9,23 @@ INDEX = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
 VERSION = json.loads((ROOT / "version.json").read_text(encoding="utf-8"))
 DOCKER = (ROOT / "Dockerfile").read_text(encoding="utf-8")
 
-assert VERSION["version"] == "2.7.2-beta.1"
-assert "APP_VERSION = \"2.7.2-beta.1\"" in (ROOT / "one_crm_server.py").read_text(encoding="utf-8")
-assert 'org.opencontainers.image.version="2.7.2-beta.1"' in DOCKER
+assert VERSION["version"] == "2.7.3-beta.1"
+assert "APP_VERSION = \"2.7.3-beta.1\"" in (ROOT / "one_crm_server.py").read_text(encoding="utf-8")
+assert 'org.opencontainers.image.version="2.7.3-beta.1"' in DOCKER
 assert "one_crm_productivity.py" in DOCKER
 
 # A versão visual deve continuar servindo assets com cache busting.
-assert "app.css?v=2.7.2" in INDEX
-assert "app.js?v=2.7.2" in INDEX
+assert "app.css?v=2.7.3" in INDEX
+assert "app.js?v=2.7.3" in INDEX
 
 # Navegação padronizada em ícones SVG e agrupada.
 assert "const UI_ICON_PATHS" in APP
 assert "function uiIcon" in APP
 assert "{id:'insights-group',label:'Análises'" in APP
-assert "{id:'platform-group',label:'Plataforma'" in APP
+assert "{id:'administrative-group',label:'Administrativo'" in APP
+assert "{id:'profiles',label:'Perfis'" in APP
+assert "{id:'platform-access',label:'Acessos da Plataforma'" in APP
+assert "{id:'platform-group',label:'Plataforma'" not in APP
 assert '<span class="top-nav-icon">${uiIcon(item.icon,15)}</span>' in APP
 
 # Dashboard deixa de depender apenas de seis stat-cards iguais.
