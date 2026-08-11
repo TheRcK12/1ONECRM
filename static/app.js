@@ -767,6 +767,7 @@ function refreshUserUi() {
           const bootData = await api('/api/bootstrap');
           state.user = bootData.user; state.csrf = bootData.csrf_token;
           state.catalogs={};state.plans=[];state.users=[];state.teams=[];state.roles=[];state.baseRoles=[];state.cashTransactions=[];
+          state.productivityAutomationRules=[];state.productivityForms=[];state.productivityDashboards=[];
           state.profiles = state.user.profiles || [];
           applyUserAppearance(state.user);
           refreshUserUi();
@@ -1759,6 +1760,7 @@ async function switchProfile(profileId) {
   await api('/api/profiles/switch',{method:'POST',body:{profile_id:profileId}});
   const data = await api('/api/bootstrap');
   state.user=data.user;state.csrf=data.csrf_token;state.catalogs={};state.plans=[];state.users=[];state.teams=[];state.roles=[];state.baseRoles=[];
+  state.productivityAutomationRules=[];state.productivityForms=[];state.productivityDashboards=[];
   refreshUserUi(); navigate('dashboard'); await renderRoute();
 }
 
@@ -2471,8 +2473,10 @@ function slugBuilderKey(value){
 }
 
 async function renderWorkCenter() {
+  const requestedProfileId=Number(activeProfile()?.id||0);
   setPage('Central de produtividade','OPERAÇÃO');
   await ensureProductivityReferenceData();
+  if(requestedProfileId!==Number(activeProfile()?.id||0)) return;
   const [taskData,notificationData,automationData,formData,dashboardData,alertData] = await Promise.all([
     api('/api/tasks').catch(()=>({tasks:[]})),
     api('/api/notifications').catch(()=>({notifications:[],unread:0})),
@@ -2481,6 +2485,7 @@ async function renderWorkCenter() {
     has('reports.manage') ? api('/api/custom-dashboards').catch(()=>({dashboards:[]})) : Promise.resolve({dashboards:[]}),
     has('security.alerts') ? api('/api/security-alerts').catch(()=>({alerts:[]})) : Promise.resolve({alerts:[]}),
   ]);
+  if(requestedProfileId!==Number(activeProfile()?.id||0)) return;
   state.productivityAutomationRules=automationData.rules||[];
   state.productivityForms=formData.forms||[];
   state.productivityDashboards=dashboardData.dashboards||[];

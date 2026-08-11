@@ -40,7 +40,7 @@ from one_crm_ai import (
 )
 
 APP_NAME = "ONE CRM"
-APP_VERSION = "2.6.7-beta.1"
+APP_VERSION = "2.6.8-beta.1"
 BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
 

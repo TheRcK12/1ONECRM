@@ -19,6 +19,6 @@ assert "require_perm(user,\"dashboard.view\")" in BACKEND
 assert "entries_count" in BACKEND
 assert ".dashboard-viewbar" in CSS
 assert ".custom-dashboard-grid" in CSS
-assert "/static/app.css?v=2.6.7" in INDEX
-assert "/static/app.js?v=2.6.7" in INDEX
+assert "/static/app.css?v=2.6.8" in INDEX
+assert "/static/app.js?v=2.6.8" in INDEX
 print("CUSTOM DASHBOARD RENDER TEST: OK")

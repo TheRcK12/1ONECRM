@@ -1,3 +1,16 @@
+# ONE CRM 2.6.8-beta.1
+
+## Isolamento da Central de Produtividade por perfil
+
+- Notificações agora são consultadas e marcadas como lidas usando **profile_id + user_id**, eliminando avisos de outro perfil na Central e em dashboards personalizados.
+- Criação e reatribuição de tarefas validam se o responsável pertence ao perfil ativo.
+- Automações não podem mais salvar ações destinadas a usuários de outro perfil; regras antigas com destinatário inválido são ignoradas com segurança na execução.
+- O backend passou a reutilizar a verificação de permissões do perfil ativo em vez de considerar apenas a lista bruta do cargo.
+- Trocas de perfil limpam os caches de produtividade do frontend.
+- A Central registra o perfil no início do carregamento e descarta respostas assíncronas antigas se o usuário trocar de perfil durante a consulta.
+- Adicionado índice `idx_notifications_profile_user` para manter a filtragem rápida em bases maiores.
+- Adicionado teste de regressão `productivity_profile_isolation_test.py`, cobrindo tarefas, notificações, leitura e automações entre dois perfis.
+
 # ONE CRM 2.6.7-beta.1
 
 - Substitui o seletor de cor nativo do sistema operacional por um editor próprio do ONE CRM.

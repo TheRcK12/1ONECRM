@@ -92,6 +92,7 @@ def install_productivity(ns: dict[str, Any]) -> None:
                 created_at TEXT NOT NULL
             );
             CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id,read_at,created_at);
+            CREATE INDEX IF NOT EXISTS idx_notifications_profile_user ON notifications(profile_id,user_id,read_at,created_at);
 
             CREATE TABLE IF NOT EXISTS automation_rules (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -181,8 +182,33 @@ def install_productivity(ns: dict[str, Any]) -> None:
     def require_perm(user: dict[str, Any], permission: str) -> None:
         if user.get("is_platform_owner") or user.get("role_code") == "owner":
             return
-        if permission not in set(user.get("permissions") or []):
-            raise ApiError(403, "Seu cargo não possui permissão para esta ação.")
+        permission_check = ns.get("has_permission")
+        if callable(permission_check):
+            if permission_check(user, permission):
+                return
+        elif permission in set(user.get("permissions") or []):
+            return
+        raise ApiError(403, "Seu cargo não possui permissão para esta ação.")
+
+    def user_can_receive_in_profile(profile_id: int, user_id: int) -> bool:
+        """Impede tarefas/notificações de atravessarem perfis por IDs reaproveitados ou regras antigas."""
+        if not profile_id or not user_id:
+            return False
+        with db_connect() as conn:
+            row = conn.execute(
+                """SELECT u.active,u.role_code,u.platform_role_code,
+                          EXISTS(SELECT 1 FROM profile_users pu
+                                 WHERE pu.profile_id=? AND pu.user_id=u.id AND pu.active=1) AS in_profile
+                   FROM users u WHERE u.id=?""",
+                (profile_id, user_id),
+            ).fetchone()
+        if not row or not bool(row["active"]):
+            return False
+        return bool(row["in_profile"]) or str(row["role_code"] or "") == "owner" or str(row["platform_role_code"] or "") == "owner"
+
+    def require_profile_recipient(profile_id: int, user_id: int) -> None:
+        if not user_can_receive_in_profile(profile_id, user_id):
+            raise ApiError(400, "O responsável selecionado não pertence ao perfil atual.")
 
     def token_hash(raw: str) -> str:
         return hashlib.sha256(raw.encode("utf-8")).hexdigest()
@@ -231,10 +257,13 @@ def install_productivity(ns: dict[str, Any]) -> None:
         d["overdue"] = bool(d.get("due_at") and d.get("status") != "done" and d["due_at"] < utc_now())
         return d
 
-    def create_notification(profile_id: int, user_id: int, title: str, message: str, level: str="info", link: str="") -> None:
+    def create_notification(profile_id: int, user_id: int, title: str, message: str, level: str="info", link: str="") -> bool:
+        if not user_can_receive_in_profile(profile_id, user_id):
+            return False
         with db_connect() as conn:
             conn.execute("INSERT INTO notifications(profile_id,user_id,title,message,level,link,created_at) VALUES(?,?,?,?,?,?,?)",
                          (profile_id,user_id,title,message,level,link,utc_now()))
+        return True
 
     def run_automations(profile_id: int, event: str, context: dict[str, Any]) -> int:
         executed = 0
@@ -250,10 +279,13 @@ def install_productivity(ns: dict[str, Any]) -> None:
                 if kind == "notify" and action.get("user_id"):
                     create_notification(profile_id,int(action["user_id"]),action.get("title") or rule["name"],action.get("message") or "Automação executada.",action.get("level") or "info",action.get("link") or "")
                 elif kind == "task" and action.get("assigned_user_id"):
+                    assigned_user_id = int(action["assigned_user_id"])
+                    if not user_can_receive_in_profile(profile_id, assigned_user_id):
+                        continue
                     now = utc_now()
                     with db_connect() as conn:
                         conn.execute("INSERT INTO tasks(profile_id,title,description,status,priority,due_at,assigned_user_id,created_by,related_type,related_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
-                                     (profile_id,action.get("title") or rule["name"],action.get("description") or "",'pending',action.get("priority") or 'normal',action.get("due_at"),int(action["assigned_user_id"]),int(rule["created_by"]),context.get("entity_type"),context.get("entity_id"),now,now))
+                                     (profile_id,action.get("title") or rule["name"],action.get("description") or "",'pending',action.get("priority") or 'normal',action.get("due_at"),assigned_user_id,int(rule["created_by"]),context.get("entity_type"),context.get("entity_id"),now,now))
             with db_connect() as conn:
                 conn.execute("UPDATE automation_rules SET last_run_at=? WHERE id=?", (utc_now(),rule["id"]))
             executed += 1
@@ -314,6 +346,7 @@ def install_productivity(ns: dict[str, Any]) -> None:
         require_perm(actor,"tasks.manage"); data=self.read_json(); title=str(data.get("title") or "").strip()
         if len(title)<3: raise ApiError(400,"Informe o título da tarefa.")
         now=utc_now(); profile_id=pid(actor); assigned=int(data.get("assigned_user_id") or actor["id"])
+        require_profile_recipient(profile_id, assigned)
         with db_connect() as conn:
             cur=conn.execute("INSERT INTO tasks(profile_id,title,description,status,priority,due_at,assigned_user_id,created_by,related_type,related_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
                 (profile_id,title,str(data.get("description") or ""),"pending",str(data.get("priority") or "normal"),data.get("due_at") or None,assigned,actor["id"],data.get("related_type") or None,data.get("related_id") or None,now,now))
@@ -331,17 +364,23 @@ def install_productivity(ns: dict[str, Any]) -> None:
             if int(row["assigned_user_id"] or 0)!=int(actor["id"]) and not (actor.get("is_platform_owner") or "tasks.manage" in set(actor.get("permissions") or [])):
                 raise ApiError(403,"Sem permissão para alterar esta tarefa.")
             status=str(data.get("status") or row["status"]); completed=utc_now() if status=="done" else None
-            conn.execute("UPDATE tasks SET title=?,description=?,status=?,priority=?,due_at=?,assigned_user_id=?,completed_at=?,updated_at=? WHERE id=?",
-                (str(data.get("title") or row["title"]),str(data.get("description") if "description" in data else row["description"]),status,str(data.get("priority") or row["priority"]),data.get("due_at") if "due_at" in data else row["due_at"],int(data.get("assigned_user_id") or row["assigned_user_id"] or actor["id"]),completed,utc_now(),task_id))
+            assigned_user_id=int(data.get("assigned_user_id") or row["assigned_user_id"] or actor["id"])
+            require_profile_recipient(profile_id, assigned_user_id)
+            conn.execute("UPDATE tasks SET title=?,description=?,status=?,priority=?,due_at=?,assigned_user_id=?,completed_at=?,updated_at=? WHERE id=? AND profile_id=?",
+                (str(data.get("title") or row["title"]),str(data.get("description") if "description" in data else row["description"]),status,str(data.get("priority") or row["priority"]),data.get("due_at") if "due_at" in data else row["due_at"],assigned_user_id,completed,utc_now(),task_id,profile_id))
         run_automations(profile_id,"task.updated",{"entity_type":"task","entity_id":task_id,"status":status})
         self.send_json(200,{"ok":True})
 
     def api_notifications(self: Any, user: dict[str,Any]) -> None:
-        with db_connect() as conn: rows=conn.execute("SELECT * FROM notifications WHERE user_id=? ORDER BY created_at DESC LIMIT 100",(user["id"],)).fetchall()
-        self.send_json(200,{"ok":True,"notifications":[dict(r) for r in rows],"unread":sum(1 for r in rows if not r["read_at"])})
+        profile_id=pid(user)
+        with db_connect() as conn:
+            rows=conn.execute("SELECT * FROM notifications WHERE profile_id=? AND user_id=? ORDER BY created_at DESC LIMIT 100",(profile_id,user["id"])).fetchall()
+        self.send_json(200,{"ok":True,"profile_id":profile_id,"notifications":[dict(r) for r in rows],"unread":sum(1 for r in rows if not r["read_at"])})
 
     def api_notification_read(self: Any,user:dict[str,Any],notification_id:int) -> None:
-        with db_connect() as conn: conn.execute("UPDATE notifications SET read_at=? WHERE id=? AND user_id=?",(utc_now(),notification_id,user["id"]))
+        profile_id=pid(user)
+        with db_connect() as conn:
+            conn.execute("UPDATE notifications SET read_at=? WHERE id=? AND user_id=? AND profile_id=?",(utc_now(),notification_id,user["id"],profile_id))
         self.send_json(200,{"ok":True})
 
     def api_automations(self: Any,user:dict[str,Any]) -> None:
@@ -353,18 +392,28 @@ def install_productivity(ns: dict[str, Any]) -> None:
         self.send_json(200,{"ok":True,"rules":result})
 
     def api_automation_save(self: Any,actor:dict[str,Any]) -> None:
-        require_perm(actor,"automations.manage"); data=self.read_json(); now=utc_now(); rule_id=int(data.get("id") or 0)
-        payload=(str(data.get("name") or "Automação"),str(data.get("trigger_event") or "task.created"),json.dumps(data.get("conditions") or {},ensure_ascii=False),json.dumps(data.get("actions") or [],ensure_ascii=False),1 if data.get("active",True) else 0,now)
+        require_perm(actor,"automations.manage"); data=self.read_json(); now=utc_now(); rule_id=int(data.get("id") or 0); profile_id=pid(actor)
+        actions=data.get("actions") or []
+        for action in actions:
+            if not isinstance(action,dict):
+                raise ApiError(400,"Existe uma ação inválida na automação.")
+            target=action.get("assigned_user_id") if action.get("type")=="task" else action.get("user_id")
+            if target:
+                require_profile_recipient(profile_id,int(target))
+        payload=(str(data.get("name") or "Automação"),str(data.get("trigger_event") or "task.created"),json.dumps(data.get("conditions") or {},ensure_ascii=False),json.dumps(actions,ensure_ascii=False),1 if data.get("active",True) else 0,now)
         with db_connect() as conn:
             if rule_id:
-                conn.execute("UPDATE automation_rules SET name=?,trigger_event=?,conditions_json=?,actions_json=?,active=?,updated_at=? WHERE id=? AND profile_id=?",(*payload,rule_id,pid(actor)))
+                conn.execute("UPDATE automation_rules SET name=?,trigger_event=?,conditions_json=?,actions_json=?,active=?,updated_at=? WHERE id=? AND profile_id=?",(*payload,rule_id,profile_id))
             else:
-                cur=conn.execute("INSERT INTO automation_rules(profile_id,name,trigger_event,conditions_json,actions_json,active,created_by,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?)",(pid(actor),*payload[:-1],actor["id"],now,now)); rule_id=int(cur.lastrowid)
+                cur=conn.execute("INSERT INTO automation_rules(profile_id,name,trigger_event,conditions_json,actions_json,active,created_by,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?)",(profile_id,*payload[:-1],actor["id"],now,now)); rule_id=int(cur.lastrowid)
         self.send_json(200,{"ok":True,"id":rule_id})
 
     def api_forms(self: Any,user:dict[str,Any]) -> None:
         require_perm(user,"forms.manage")
-        with db_connect() as conn: rows=conn.execute("SELECT * FROM custom_forms WHERE profile_id=? ORDER BY name",(pid(user),)).fetchall()
+        with db_connect() as conn:
+            rows=conn.execute("""SELECT f.*,
+                (SELECT COUNT(*) FROM custom_form_entries e WHERE e.profile_id=f.profile_id AND e.form_id=f.id) AS entries_count
+                FROM custom_forms f WHERE f.profile_id=? ORDER BY f.name""",(pid(user),)).fetchall()
         out=[]
         for r in rows: d=dict(r); d["schema"]=json.loads(d.pop("schema_json") or "[]"); out.append(d)
         self.send_json(200,{"ok":True,"forms":out})
@@ -434,19 +483,42 @@ def install_productivity(ns: dict[str, Any]) -> None:
         self.send_json(200,{"ok":True,"alerts":out})
 
     def api_dashboards(self:Any,user:dict[str,Any]) -> None:
-        require_perm(user,"reports.manage")
-        with db_connect() as conn: rows=conn.execute("SELECT * FROM dashboard_views WHERE profile_id=? AND (owner_user_id IS NULL OR owner_user_id=?) ORDER BY is_default DESC,name",(pid(user),user["id"])).fetchall()
+        # Ler uma visão de dashboard é parte do próprio acesso à Dashboard.
+        # A criação/edição continua restrita a reports.manage.
+        require_perm(user,"dashboard.view")
+        with db_connect() as conn:
+            rows=conn.execute("SELECT * FROM dashboard_views WHERE profile_id=? AND (owner_user_id IS NULL OR owner_user_id=?) ORDER BY is_default DESC,name",(pid(user),user["id"])).fetchall()
         out=[]
-        for r in rows: d=dict(r); d["config"]=json.loads(d.pop("config_json") or "{}"); out.append(d)
+        for r in rows:
+            d=dict(r); d["config"]=json.loads(d.pop("config_json") or "{}"); out.append(d)
         self.send_json(200,{"ok":True,"dashboards":out})
 
     def api_dashboard_save(self:Any,actor:dict[str,Any]) -> None:
-        require_perm(actor,"reports.manage"); data=self.read_json(); now=utc_now(); view_id=int(data.get("id") or 0)
+        require_perm(actor,"reports.manage")
+        data=self.read_json(); now=utc_now(); view_id=int(data.get("id") or 0); profile_id=pid(actor)
         config=data.get("config") or {}; name=str(data.get("name") or "Meu dashboard").strip()
+        if len(name)<2: raise ApiError(400,"Informe um nome para a visão.")
+        widgets=config.get("widgets") if isinstance(config,dict) else None
+        allowed_widgets={"summary","tasks","notifications","automations","forms","security"}
+        if not isinstance(widgets,list) or not widgets or any(widget not in allowed_widgets for widget in widgets):
+            raise ApiError(400,"Escolha pelo menos um widget válido.")
+        shared=bool(data.get("shared")); owner_user_id=None if shared else int(actor["id"]); is_default=1 if data.get("is_default") else 0
         with db_connect() as conn:
-            if view_id: conn.execute("UPDATE dashboard_views SET name=?,config_json=?,is_default=?,updated_at=? WHERE id=? AND profile_id=?",(name,json.dumps(config,ensure_ascii=False),1 if data.get("is_default") else 0,now,view_id,pid(actor)))
+            if view_id:
+                existing=conn.execute("SELECT id,owner_user_id FROM dashboard_views WHERE id=? AND profile_id=?",(view_id,profile_id)).fetchone()
+                if not existing: raise ApiError(404,"Visão de dashboard não encontrada.")
+                if existing["owner_user_id"] is not None and int(existing["owner_user_id"])!=int(actor["id"]) and not actor.get("is_platform_owner"):
+                    raise ApiError(403,"Você não pode editar a visão pessoal de outro usuário.")
+            if is_default:
+                if owner_user_id is None:
+                    conn.execute("UPDATE dashboard_views SET is_default=0,updated_at=? WHERE profile_id=? AND owner_user_id IS NULL AND id<>?",(now,profile_id,view_id or -1))
+                else:
+                    conn.execute("UPDATE dashboard_views SET is_default=0,updated_at=? WHERE profile_id=? AND owner_user_id=? AND id<>?",(now,profile_id,owner_user_id,view_id or -1))
+            if view_id:
+                conn.execute("UPDATE dashboard_views SET owner_user_id=?,name=?,config_json=?,is_default=?,updated_at=? WHERE id=? AND profile_id=?",(owner_user_id,name,json.dumps(config,ensure_ascii=False),is_default,now,view_id,profile_id))
             else:
-                cur=conn.execute("INSERT INTO dashboard_views(profile_id,owner_user_id,name,config_json,is_default,created_by,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)",(pid(actor),None if data.get("shared") else actor["id"],name,json.dumps(config,ensure_ascii=False),1 if data.get("is_default") else 0,actor["id"],now,now)); view_id=int(cur.lastrowid)
+                cur=conn.execute("INSERT INTO dashboard_views(profile_id,owner_user_id,name,config_json,is_default,created_by,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)",(profile_id,owner_user_id,name,json.dumps(config,ensure_ascii=False),is_default,actor["id"],now,now)); view_id=int(cur.lastrowid)
+        audit(actor["id"],"dashboard.view.save","dashboard_view",view_id,{"name":name,"shared":shared,"is_default":bool(is_default)},self.client_ip())
         self.send_json(200,{"ok":True,"id":view_id})
 
     def route_get(self:Any) -> None:
