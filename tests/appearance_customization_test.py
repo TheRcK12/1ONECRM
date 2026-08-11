@@ -11,7 +11,7 @@ assert "data-accent-choice" in app
 assert "open-accent-studio" in app
 assert "openAccentColorStudio" in app
 assert 'type="color"' not in app
-assert "data-background-choice" in app
+assert "data-background-choice" not in app
 assert "/api/me/appearance" in app
 assert "accent_preference" in server
 assert "background_preference" in server
@@ -21,7 +21,11 @@ assert "background_preference" in profiles
 assert 'data-accent="emerald"' in css
 assert 'data-accent="violet"' in css
 assert 'data-background="obsidian"' in css
+assert 'data-background="graphite"' not in css
+assert 'data-background="midnight"' not in css
+assert 'data-background="forest"' not in css
 assert "--accent-glow" in css
 assert "one-crm-accent" in theme
 assert "one-crm-background" in theme
+assert "dataset.background = 'obsidian'" in theme
 print("Appearance customization: OK")

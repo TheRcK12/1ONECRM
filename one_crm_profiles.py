@@ -2477,7 +2477,7 @@ def install_profiles(ns: dict[str, Any]) -> None:
             "bio": user.get("bio") or "",
             "theme_preference": user.get("theme_preference") or "dark",
             "accent_preference": user.get("accent_preference") or "emerald",
-            "background_preference": user.get("background_preference") or "graphite",
+            "background_preference": "obsidian",
             "role_code": user.get("effective_role_code") or user.get("role_code"),
             "base_role": user.get("role_code"),
             "role_name": "Dono da Plataforma" if owner else (user.get("role_name") or "Usuário"),

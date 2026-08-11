@@ -162,17 +162,12 @@ const accentPresets = {
   rose:{label:'Rosa',hex:'#ff72ad'},
   amber:{label:'Âmbar',hex:'#f0b95d'},
 };
-const backgroundPresets = {
-  graphite:{label:'Grafite'},
-  midnight:{label:'Meia-noite'},
-  obsidian:{label:'Obsidiana'},
-  forest:{label:'Floresta escura'},
-};
+const DARK_BACKGROUND = 'obsidian';
 const normalizeAccent = value => {
   const raw=String(value||'').trim().toLowerCase();
   return accentPresets[raw] || /^#[0-9a-f]{6}$/.test(raw) ? raw : 'emerald';
 };
-const normalizeBackground = value => backgroundPresets[String(value||'').trim().toLowerCase()] ? String(value).trim().toLowerCase() : 'graphite';
+const normalizeBackground = _value => DARK_BACKGROUND;
 function hexToRgb(hex){
   const raw=String(hex||'').replace('#','');
   if(!/^[0-9a-f]{6}$/i.test(raw)) return {r:85,g:230,b:157};
@@ -237,18 +232,18 @@ function applyBackground(background,{saveLocal=true}={}){
   updateThemeUi();
 }
 function currentAccent(){return normalizeAccent(state.user?.accent_preference || localStorage.getItem('one-crm-accent') || 'emerald');}
-function currentBackground(){return normalizeBackground(state.user?.background_preference || localStorage.getItem('one-crm-background') || 'graphite');}
+function currentBackground(){return DARK_BACKGROUND;}
 function applyUserAppearance(user=state.user){
   applyTheme(user?.theme_preference || localStorage.getItem('one-crm-theme') || 'dark');
   applyAccent(user?.accent_preference || localStorage.getItem('one-crm-accent') || 'emerald');
-  applyBackground(user?.background_preference || localStorage.getItem('one-crm-background') || 'graphite');
+  applyBackground(DARK_BACKGROUND);
 }
 async function saveAppearance(patch){
   if(!state.user)return;
   const payload={
     theme:patch.theme || state.user.theme_preference || currentTheme(),
     accent:patch.accent || state.user.accent_preference || currentAccent(),
-    background:patch.background || state.user.background_preference || currentBackground(),
+    background:DARK_BACKGROUND,
   };
   const result=await api('/api/me/appearance',{method:'PUT',body:payload});
   state.user.theme_preference=result.appearance.theme;
@@ -2518,12 +2513,9 @@ async function renderAccount() {
             <button class="theme-card ${currentTheme()==='dark'?'active':''}" data-theme-choice="dark" type="button"><span>☾</span><strong>Escuro</strong><small>Contraste alto</small></button>
             <button class="theme-card ${currentTheme()==='light'?'active':''}" data-theme-choice="light" type="button"><span>☀</span><strong>Claro</strong><small>Ambientes iluminados</small></button>
           </div></div>
-          <div class="appearance-group"><div class="appearance-group-head"><strong>Cor de destaque</strong><small>Menus, botões, foco e brilho neon</small></div>
+          <div class="appearance-group"><div class="appearance-group-head"><strong>Cor de destaque</strong><small>Menus, botões e foco · o fundo permanece obsidiana</small></div>
             <div class="accent-choice" role="group" aria-label="Cor de destaque">${Object.entries(accentPresets).map(([code,item])=>`<button type="button" class="accent-swatch ${currentAccent()===code?'active':''}" data-accent-choice="${code}" title="${esc(item.label)}" aria-label="${esc(item.label)}"><i style="--swatch:${item.hex}"></i><span>${esc(item.label)}</span></button>`).join('')}</div>
             <button class="custom-accent-row" id="open-accent-studio" type="button" aria-label="Abrir editor avançado de cor"><i class="current-accent-preview" style="--current-accent:${esc(accentHex())}"></i><span><strong>Cor personalizada</strong><small>${esc(accentHex().toUpperCase())} · editor avançado</small></span><b>Personalizar</b></button>
-          </div>
-          <div class="appearance-group"><div class="appearance-group-head"><strong>Fundo do modo escuro</strong><small>Altera apenas as superfícies neutras</small></div>
-            <div class="background-choice" role="group" aria-label="Fundo escuro">${Object.entries(backgroundPresets).map(([code,item])=>`<button type="button" class="background-swatch ${currentBackground()===code?'active':''}" data-background-choice="${code}"><i class="background-preview ${code}"></i><span>${esc(item.label)}</span></button>`).join('')}</div>
           </div>
         </div></section>
         <section class="panel"><header class="panel-head"><h3>Dados de acesso</h3></header><div class="panel-body"><div class="metric-row"><span>Cargo</span><strong>${esc(u.role_name||roleLabel(u.role_code))}</strong></div><div class="metric-row"><span>Equipe</span><strong>${esc(u.team_name||'-')}</strong></div><div class="metric-row"><span>Permissões</span><strong>${u.permissions.length}</strong></div></div></section>
@@ -2559,12 +2551,6 @@ async function renderAccount() {
     catch(error){toast(error.message,'error');}
   }));
   $('#open-accent-studio')?.addEventListener('click',openAccentColorStudio);
-  $$('[data-background-choice]').forEach(button=>button.addEventListener('click',async()=>{
-    const background=button.dataset.backgroundChoice;
-    applyBackground(background);state.user.background_preference=background;
-    try{await saveAppearance({background});toast(`Fundo ${backgroundPresets[background]?.label||background} aplicado.`);renderAccount();}
-    catch(error){toast(error.message,'error');}
-  }));
   $('#password-form').addEventListener('submit',async e=>{e.preventDefault();try{const r=await api('/api/me/password',{method:'PUT',body:formObject(e.currentTarget)});toast(r.message);setTimeout(()=>location.reload(),1200);}catch(error){toast(error.message,'error');}});
 }
 

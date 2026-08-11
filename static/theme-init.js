@@ -2,10 +2,10 @@
   try {
     const theme = localStorage.getItem('one-crm-theme');
     const accent = (localStorage.getItem('one-crm-accent') || 'emerald').toLowerCase();
-    const background = (localStorage.getItem('one-crm-background') || 'graphite').toLowerCase();
     const presets = new Set(['emerald','cyan','blue','violet','rose','amber']);
     document.documentElement.dataset.theme = theme === 'light' ? 'light' : 'dark';
-    document.documentElement.dataset.background = ['graphite','midnight','obsidian','forest'].includes(background) ? background : 'graphite';
+    document.documentElement.dataset.background = 'obsidian';
+    localStorage.setItem('one-crm-background', 'obsidian');
     if (presets.has(accent)) {
       document.documentElement.dataset.accent = accent;
     } else if (/^#[0-9a-f]{6}$/.test(accent)) {
@@ -26,6 +26,6 @@
   } catch (_error) {
     document.documentElement.dataset.theme = 'dark';
     document.documentElement.dataset.accent = 'emerald';
-    document.documentElement.dataset.background = 'graphite';
+    document.documentElement.dataset.background = 'obsidian';
   }
 })();

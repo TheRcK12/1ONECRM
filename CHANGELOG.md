@@ -1,3 +1,13 @@
+## 2.7.1-beta.1
+
+### Aparência
+
+- Fundo do tema escuro fixado em **Obsidiana**.
+- Removida da interface a escolha entre Grafite, Meia-noite, Obsidiana e Floresta escura.
+- Preferências antigas de fundo são migradas automaticamente para Obsidiana.
+- A **Cor de destaque** continua independente e afeta somente menus, botões, foco e elementos de interação.
+- Obsidiana não faz parte das opções de cor de destaque.
+
 # ONE CRM 2.7.0-beta.1
 
 ## Auditoria de completude funcional

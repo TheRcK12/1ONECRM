@@ -40,7 +40,7 @@ from one_crm_ai import (
 )
 
 APP_NAME = "ONE CRM"
-APP_VERSION = "2.7.0-beta.1"
+APP_VERSION = "2.7.1-beta.1"
 BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
 
@@ -481,7 +481,7 @@ def init_database() -> None:
         bio TEXT,
         theme_preference TEXT NOT NULL DEFAULT 'dark' CHECK(theme_preference IN ('dark','light')),
         accent_preference TEXT NOT NULL DEFAULT 'emerald',
-        background_preference TEXT NOT NULL DEFAULT 'graphite',
+        background_preference TEXT NOT NULL DEFAULT 'obsidian',
         password_hash TEXT NOT NULL,
         role_code TEXT NOT NULL CHECK(role_code IN ('owner','manager','bko','seller')),
         custom_role_code TEXT,
@@ -691,12 +691,14 @@ def init_database() -> None:
             "bio": "ALTER TABLE users ADD COLUMN bio TEXT",
             "theme_preference": "ALTER TABLE users ADD COLUMN theme_preference TEXT NOT NULL DEFAULT 'dark'",
             "accent_preference": "ALTER TABLE users ADD COLUMN accent_preference TEXT NOT NULL DEFAULT 'emerald'",
-            "background_preference": "ALTER TABLE users ADD COLUMN background_preference TEXT NOT NULL DEFAULT 'graphite'",
+            "background_preference": "ALTER TABLE users ADD COLUMN background_preference TEXT NOT NULL DEFAULT 'obsidian'",
             "custom_role_code": "ALTER TABLE users ADD COLUMN custom_role_code TEXT",
         }
         for column, statement in migrations.items():
             if column not in existing_columns:
                 conn.execute(statement)
+        # ONE CRM 2.7.1: o modo escuro usa um único fundo canônico.
+        conn.execute("UPDATE users SET background_preference='obsidian' WHERE background_preference IS NULL OR background_preference<>'obsidian'")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_users_custom_role ON users(custom_role_code)")
         ai_columns = {row[1] for row in conn.execute("PRAGMA table_info(ai_usage_logs)").fetchall()}
         if "provider" not in ai_columns:
@@ -1514,7 +1516,7 @@ class OneCRMHandler(BaseHTTPRequestHandler):
             "bio": user.get("bio") or "",
             "theme_preference": user.get("theme_preference") or "dark",
             "accent_preference": user.get("accent_preference") or "emerald",
-            "background_preference": user.get("background_preference") or "graphite",
+            "background_preference": "obsidian",
             "role_code": effective,
             "base_role": user["role_code"],
             "role_name": user.get("role_name") or SYSTEM_ROLES.get(user["role_code"], (effective, "", user["role_code"]))[0],
@@ -2527,15 +2529,12 @@ class OneCRMHandler(BaseHTTPRequestHandler):
         data = self.read_json()
         theme = (data.get("theme") or user.get("theme_preference") or "dark").strip().lower()
         accent = (data.get("accent") or user.get("accent_preference") or "emerald").strip().lower()
-        background = (data.get("background") or user.get("background_preference") or "graphite").strip().lower()
+        background = "obsidian"
         accent_presets = {"emerald", "cyan", "blue", "violet", "rose", "amber"}
-        background_presets = {"graphite", "midnight", "obsidian", "forest"}
         if theme not in {"dark", "light"}:
             raise ApiError(400, "Tema inválido.")
         if accent not in accent_presets and not re.fullmatch(r"#[0-9a-f]{6}", accent):
             raise ApiError(400, "Cor de destaque inválida.")
-        if background not in background_presets:
-            raise ApiError(400, "Fundo inválido.")
         with db_connect() as conn:
             conn.execute(
                 "UPDATE users SET theme_preference=?,accent_preference=?,background_preference=?,updated_at=? WHERE id=?",
