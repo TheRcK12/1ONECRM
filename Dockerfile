@@ -2,7 +2,7 @@ FROM python:3.11-slim-bookworm
 
 LABEL org.opencontainers.image.title="ONE CRM" \
       org.opencontainers.image.description="ONE CRM multi-perfil preparado para Railway" \
-      org.opencontainers.image.version="2.7.3-beta.1"
+      org.opencontainers.image.version="2.7.4-beta.1"
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \

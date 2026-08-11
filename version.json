@@ -1,6 +1,6 @@
 {
   "name": "ONE CRM",
-  "version": "2.7.3-beta.1",
+  "version": "2.7.4-beta.1",
   "channel": "beta-online",
-  "description": "Gestão de Perfis restaurada no menu Administrativo para Donos, com detecção robusta do cargo de Dono e personalização livre de cor."
+  "description": "Exclusão segura de perfis para Donos, com confirmação nominal, backup automático, limpeza integral dos dados do perfil e proteção do último perfil."
 }

@@ -1,3 +1,17 @@
+# ONE CRM 2.7.4-beta.1
+
+- Adiciona **Excluir perfil** na tela de Perfis e dentro de **Configurar perfil**.
+- Exclusão disponível somente para o **Dono da Plataforma**.
+- Exige digitar o nome exato do perfil e uma confirmação final antes da remoção.
+- Bloqueia a exclusão quando existe somente um perfil na plataforma.
+- Cria automaticamente um **backup de segurança** antes de excluir qualquer perfil.
+- Remove dados, vínculos, cargos, vendas, registros, produtividade, anexos e demais entidades escopadas pelo `profile_id`.
+- Remove também os arquivos físicos de anexos pertencentes ao perfil excluído.
+- Se o Dono excluir o perfil atualmente aberto, a sessão é redirecionada automaticamente para outro perfil válido.
+- Registra a exclusão na auditoria global com o perfil removido, perfil de fallback e nome do backup.
+- Mantém o fundo escuro fixo em Obsidiana e a cor de destaque exclusivamente personalizada.
+- Adiciona teste de regressão `profile_delete_test.py`.
+
 # ONE CRM 2.7.3-beta.1
 
 - Restaura a gestão de **Perfis** para o Dono dentro de **Administrativo**.

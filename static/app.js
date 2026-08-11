@@ -1830,11 +1830,33 @@ async function renderProfiles() {
       <p>${esc(profile.description||'Sem descrição.')}</p>
       <div class="profile-metrics"><span><b>${profile.users_count||0}</b> usuários</span><span><b>${profile.modules?.length||0}</b> módulos</span></div>
       <div class="profile-contractor"><small>Contratante</small><strong>${esc(profile.contractor_name||'Não definido')}</strong></div>
-      <footer><button class="btn small" data-profile-enter="${profile.id}">Entrar</button><button class="btn small ghost" data-profile-edit="${profile.id}">Configurar</button></footer>
+      <footer><button class="btn small" data-profile-enter="${profile.id}">Entrar</button><button class="btn small ghost" data-profile-edit="${profile.id}">Configurar</button><button class="btn small danger" data-profile-delete="${profile.id}" ${state.profiles.length<=1?'disabled title="O único perfil da plataforma não pode ser excluído."':''}>${uiIcon('trash',13)} Excluir</button></footer>
     </article>`).join('')}</div>`;
   $('#new-profile').addEventListener('click',()=>openProfileForm());
   $$('[data-profile-enter]').forEach(button=>button.addEventListener('click',()=>switchProfile(Number(button.dataset.profileEnter))));
   $$('[data-profile-edit]').forEach(button=>button.addEventListener('click',()=>openProfileForm(Number(button.dataset.profileEdit))));
+  $$('[data-profile-delete]').forEach(button=>button.addEventListener('click',()=>deleteProfile(Number(button.dataset.profileDelete))));
+}
+
+async function deleteProfile(profileId) {
+  const profile=state.profiles.find(item=>Number(item.id)===Number(profileId));
+  if(!profile){toast('Perfil não encontrado.','error');return;}
+  if(state.profiles.length<=1){toast('O único perfil da plataforma não pode ser excluído.','error');return;}
+  const typed=prompt(`EXCLUSÃO PERMANENTE\n\nO perfil “${profile.name}” e todos os dados vinculados a ele serão removidos. Um backup de segurança será criado automaticamente antes da exclusão.\n\nDigite exatamente o nome do perfil para confirmar:`, '');
+  if(typed===null)return;
+  if(String(typed).trim()!==String(profile.name).trim()){toast('Nome diferente. A exclusão foi cancelada.','error');return;}
+  if(!confirm(`Confirmar a exclusão permanente do perfil “${profile.name}”?`))return;
+  try{
+    const result=await api(`/api/profiles/${profileId}`,{method:'DELETE'});
+    closeModal();
+    const data=await api('/api/bootstrap');
+    state.user=data.user;state.csrf=data.csrf_token;state.profiles=state.user.profiles||[];
+    state.catalogs={};state.plans=[];state.users=[];state.teams=[];state.roles=[];state.baseRoles=[];state.cashTransactions=[];
+    state.productivityTasks=[];state.productivityAssignees=[];state.productivityRecipients=[];state.productivityFormUsers=[];state.productivityAutomationRules=[];state.productivityForms=[];state.productivityDashboards=[];state.profileRecordAssignees=[];state.teamManagerCandidates=[];
+    refreshUserUi();
+    toast(`Perfil “${profile.name}” excluído. Backup criado: ${result.backup||'backup de segurança'}.`);
+    await renderProfiles();
+  }catch(error){toast(error.message,'error');}
 }
 
 async function switchProfile(profileId) {
@@ -1869,7 +1891,7 @@ function openProfileForm(id=null) {
     <label>Contratante<select name="contractor_user_id">${optionList(contractors,profile?.contractor_user_id,'Sem contratante')}</select></label>
     ${id?`<label class="switch-row">Perfil ativo<input type="checkbox" name="active" ${profile.active?'checked':''}></label>`:''}
     <fieldset class="full permission-group"><legend>Módulos habilitados</legend><div class="permission-grid" id="profile-module-grid">${profileModuleOptions(profile?.modules||template.modules,template)}</div></fieldset>
-    <div class="full page-actions" style="justify-content:flex-end"><button type="button" class="btn ghost" data-close-modal>Cancelar</button><button class="btn primary">Salvar perfil</button></div>
+    <div class="full page-actions" style="justify-content:flex-end">${id?`<button type="button" class="btn danger" id="delete-profile-from-form" ${state.profiles.length<=1?'disabled title="O único perfil da plataforma não pode ser excluído."':''}>${uiIcon('trash',13)} Excluir perfil</button><span style="flex:1"></span>`:''}<button type="button" class="btn ghost" data-close-modal>Cancelar</button><button class="btn primary">Salvar perfil</button></div>
   </form>`,{wide:true});
   const typeSelect=$('#profile-form [name="business_type"]');
   typeSelect?.addEventListener('change',()=>{
@@ -1877,6 +1899,7 @@ function openProfileForm(id=null) {
     $('#profile-module-grid').innerHTML=profileModuleOptions(t?.modules||[],t);
     $('#profile-preset-preview').innerHTML=profileTemplatePreview(t);
   });
+  $('#delete-profile-from-form')?.addEventListener('click',()=>deleteProfile(id));
   $('#profile-form').addEventListener('submit',async event=>{
     event.preventDefault();
     const payload=formObject(event.currentTarget);

@@ -2782,6 +2782,107 @@ def install_profiles(ns: dict[str, Any]) -> None:
         audit(actor["id"], "profile.update", "profile", profile_id, {"fields": list(updates)}, self.client_ip())
         self.send_json(200, {"ok": True, "message": "Perfil atualizado."})
 
+    def api_profile_delete(self: Any, actor: dict[str, Any], profile_id: int) -> None:
+        if not is_platform_owner(actor):
+            raise ApiError(403, "Somente o Dono da plataforma pode excluir perfis.")
+        if not profile_id:
+            raise ApiError(400, "Perfil inválido.")
+
+        attachment_files: list[str] = []
+        deleted_name = ""
+        backup_name = ""
+        with db_connect() as conn:
+            current = conn.execute("SELECT id,name FROM business_profiles WHERE id=?", (profile_id,)).fetchone()
+            if not current:
+                raise ApiError(404, "Perfil não encontrado.")
+            total_profiles = int(conn.execute("SELECT COUNT(*) FROM business_profiles").fetchone()[0] or 0)
+            if total_profiles <= 1:
+                raise ApiError(409, "Não é possível excluir o único perfil da plataforma.")
+            fallback = conn.execute(
+                "SELECT id FROM business_profiles WHERE id<>? AND active=1 ORDER BY id LIMIT 1",
+                (profile_id,),
+            ).fetchone()
+            if not fallback:
+                fallback = conn.execute(
+                    "SELECT id FROM business_profiles WHERE id<>? ORDER BY id LIMIT 1",
+                    (profile_id,),
+                ).fetchone()
+            if not fallback:
+                raise ApiError(409, "Crie outro perfil antes de excluir este.")
+            fallback_id = int(fallback[0])
+            deleted_name = str(current["name"] or f"Perfil {profile_id}")
+
+        # Backup obrigatório antes de uma exclusão destrutiva.
+        try:
+            backup_name = ns["create_backup"]("pre_profile_delete").name
+        except Exception as exc:
+            raise ApiError(500, f"Não foi possível criar o backup de segurança antes da exclusão: {exc}")
+
+        with db_connect() as conn:
+            # Guarda os arquivos físicos para limpeza após a transação.
+            table_names = {str(row[0]) for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
+            if "attachments" in table_names:
+                attachment_files = [str(row[0]) for row in conn.execute(
+                    "SELECT stored_name FROM attachments WHERE profile_id=?", (profile_id,)
+                ).fetchall() if row[0]]
+
+            # Nenhuma sessão pode continuar apontando para um perfil que será removido.
+            conn.execute(
+                "UPDATE sessions SET active_profile_id=? WHERE active_profile_id=?",
+                (fallback_id, profile_id),
+            )
+
+            # Apaga qualquer dado escopado pelo perfil, inclusive módulos adicionados em versões futuras.
+            scoped_tables: list[str] = []
+            for table in table_names:
+                if table.startswith("sqlite_") or table in {"business_profiles", "sessions"}:
+                    continue
+                columns = {str(row[1]) for row in conn.execute(f'PRAGMA table_info("{table.replace(chr(34), chr(34)*2)}")').fetchall()}
+                if "profile_id" in columns:
+                    scoped_tables.append(table)
+
+            pending = scoped_tables[:]
+            last_error: Exception | None = None
+            while pending:
+                progressed = False
+                remaining: list[str] = []
+                for table in pending:
+                    safe_table = table.replace('"', '""')
+                    try:
+                        conn.execute(f'DELETE FROM "{safe_table}" WHERE profile_id=?', (profile_id,))
+                        progressed = True
+                    except sqlite3.IntegrityError as exc:
+                        last_error = exc
+                        remaining.append(table)
+                if not remaining:
+                    break
+                if not progressed:
+                    raise ApiError(409, f"Não foi possível remover todos os dados vinculados ao perfil: {last_error}")
+                pending = remaining
+
+            conn.execute("DELETE FROM business_profiles WHERE id=?", (profile_id,))
+
+        # Remove os binários de anexos somente depois que a exclusão no banco foi confirmada.
+        attach_dir = ns["DATA_DIR"] / "attachments"
+        for stored_name in attachment_files:
+            try:
+                (attach_dir / stored_name).unlink(missing_ok=True)
+            except Exception:
+                pass
+
+        platform_global_audit(
+            actor["id"], "profile.delete", "profile", profile_id,
+            {"name": deleted_name, "fallback_profile_id": fallback_id, "backup": backup_name},
+            self.client_ip(),
+        )
+        self.send_json(200, {
+            "ok": True,
+            "message": "Perfil excluído permanentemente.",
+            "deleted_profile_id": profile_id,
+            "fallback_profile_id": fallback_id,
+            "backup": backup_name,
+        })
+
     def api_profile_switch(self: Any, actor: dict[str, Any]) -> None:
         data = self.read_json()
         profile_id = int(data.get("profile_id") or 0)
@@ -4403,6 +4504,8 @@ def install_profiles(ns: dict[str, Any]) -> None:
             return self.api_platform_user_update(user, int(path.rsplit("/", 1)[1]))
         if method == "PUT" and path.startswith("/api/profiles/") and path != "/api/profiles/switch":
             return self.api_profile_update_business(user, int(path.rsplit("/", 1)[1]))
+        if method == "DELETE" and path.startswith("/api/profiles/") and path != "/api/profiles/switch":
+            return self.api_profile_delete(user, int(path.rsplit("/", 1)[1]))
         if method == "POST" and path == "/api/profiles/switch":
             return self.api_profile_switch(user)
         if method == "POST" and path == "/api/cash":
@@ -4427,6 +4530,7 @@ def install_profiles(ns: dict[str, Any]) -> None:
     Handler.api_platform_user_update = api_platform_user_update
     Handler.api_profile_create = api_profile_create
     Handler.api_profile_update_business = api_profile_update_business
+    Handler.api_profile_delete = api_profile_delete
     Handler.api_profile_switch = api_profile_switch
     Handler.api_users_list = api_users_list
     Handler.api_user_create = api_user_create
