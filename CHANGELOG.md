@@ -1,3 +1,24 @@
+# ONE CRM 2.7.0-beta.1
+
+## Auditoria de completude funcional
+
+- Completa o ciclo de tarefas da Central de Produtividade: iniciar, concluir, reabrir, editar e cancelar conforme a responsabilidade e a permissão do usuário.
+- Permite que qualquer integrante do perfil consulte e conclua as tarefas designadas a ele, inclusive o Contratante, sem exigir permissão administrativa `tasks.manage`.
+- Mantém tarefas, notificações, automações, formulários, anexos e dashboards isolados pelo perfil ativo e valida os destinatários antes de criar/reatribuir registros.
+- Adiciona leitura individual e em lote das notificações, além de ação para abrir o destino associado.
+- Torna formulários personalizados realmente operacionais: preencher, enviar, consultar envios, usar campos de usuário e anexar documentos.
+- Adiciona a aba Documentos com envio, listagem, download e exclusão de arquivos do perfil.
+- Completa convites por e-mail e recuperação de senha com tela para definição da nova senha e vínculo correto do convidado ao perfil/cargo.
+- Adiciona download protegido dos backups pelo Dono da Plataforma.
+- Adiciona resolução e reabertura de alertas de segurança e corrige a persistência de tentativas inválidas de login para que alertas de força bruta realmente sejam gravados.
+- Adiciona exclusão de dashboards personalizados.
+- Corrige cards de dashboards genéricas para não revelar módulos sem permissão e corrige seletores de responsáveis para não depender indevidamente de `users.view`.
+- Corrige consistência entre permissões `view`/`manage` nas telas de Funcionários e Caixa e fornece candidatos de gerente às Equipes sem ampliar a listagem de usuários.
+- Amplia a busca global para Caixa e módulos genéricos do perfil, além de Vendas.
+- Identifica a integração Evolution como reservada/não homologada em vez de apresentá-la como recurso operacional.
+- Aumenta o limite HTTP interno para comportar anexos de até 5 MB codificados em Base64.
+- Adiciona testes de regressão de completude funcional, ciclo de tarefas (incluindo Contratante) e fluxos completos de convite, formulários, documentos, dashboards, backups e segurança.
+
 # ONE CRM 2.6.8-beta.1
 
 ## Isolamento da Central de Produtividade por perfil

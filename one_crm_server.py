@@ -40,7 +40,7 @@ from one_crm_ai import (
 )
 
 APP_NAME = "ONE CRM"
-APP_VERSION = "2.6.8-beta.1"
+APP_VERSION = "2.7.0-beta.1"
 BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
 
@@ -86,7 +86,7 @@ DEFAULT_LOG_DIR = DATA_DIR / "logs" if IS_RAILWAY or RAILWAY_VOLUME_PATH else BA
 LOG_DIR = Path(os.getenv("ONE_CRM_LOG_DIR", str(DEFAULT_LOG_DIR))).resolve()
 CONFIG_PATH = BASE_DIR / "config.json"
 PID_PATH = Path(os.getenv("ONE_CRM_PID_PATH", "/tmp/one_crm.pid" if IS_RAILWAY else str(BASE_DIR / "server.pid")))
-MAX_BODY = 2 * 1024 * 1024
+MAX_BODY = 8 * 1024 * 1024
 COOKIE_NAME = "onecrm_session"
 SECURE_COOKIES = env_flag("ONE_CRM_SECURE_COOKIES", IS_RAILWAY)
 TRUST_PROXY_HEADERS = env_flag("ONE_CRM_TRUST_PROXY_HEADERS", IS_RAILWAY)
@@ -1229,6 +1229,12 @@ class OneCRMHandler(BaseHTTPRequestHandler):
         except Exception as exc:
             self.handle_error(exc)
 
+    def do_DELETE(self) -> None:
+        try:
+            self.route_write("DELETE")
+        except Exception as exc:
+            self.handle_error(exc)
+
     def route_get(self) -> None:
         parsed = urlparse(self.path)
         path = parsed.path.rstrip("/") or "/"
@@ -1429,6 +1435,8 @@ class OneCRMHandler(BaseHTTPRequestHandler):
         password = data.get("password") or ""
         identity = f"{self.client_ip()}|{email}"
         now_dt = datetime.now()
+        failed_login = False
+        user_id: int | None = None
         with db_connect() as conn:
             attempt = conn.execute("SELECT * FROM login_attempts WHERE identity=?", (identity,)).fetchone()
             if attempt and attempt["blocked_until"]:
@@ -1439,6 +1447,7 @@ class OneCRMHandler(BaseHTTPRequestHandler):
             row = conn.execute("SELECT * FROM users WHERE email=? COLLATE NOCASE", (email,)).fetchone()
             valid = row is not None and row["active"] == 1 and verify_password(password, row["password_hash"])
             if not valid:
+                failed_login = True
                 failed = (attempt["failed_count"] if attempt else 0) + 1
                 first = attempt["first_failed_at"] if attempt and attempt["first_failed_at"] else utc_now()
                 blocked_until = None
@@ -1453,11 +1462,31 @@ class OneCRMHandler(BaseHTTPRequestHandler):
                        blocked_until=excluded.blocked_until""",
                     (identity, failed, first, blocked_until),
                 )
-                audit(None, "auth.login_failed", "user", None, {"email": email}, self.client_ip())
-                raise ApiError(401, "E-mail ou senha inválidos.")
-            conn.execute("DELETE FROM login_attempts WHERE identity=?", (identity,))
-            conn.execute("UPDATE users SET last_login_at=?,updated_at=? WHERE id=?", (utc_now(), utc_now(), row["id"]))
-            user_id = row["id"]
+                # A extensão de produtividade cria security_alerts. Ao atingir o
+                # limite, o Dono recebe um alerta global sem interromper o login
+                # em instalações onde a extensão esteja desativada.
+                if blocked_until:
+                    try:
+                        conn.execute(
+                            """INSERT INTO security_alerts(profile_id,user_id,alert_type,severity,title,details_json,created_at)
+                               VALUES(NULL,?,'auth.bruteforce','high','Bloqueio por tentativas de login',?,?)""",
+                            (int(row["id"]) if row else None, json_dumps({"email": email, "ip": self.client_ip(), "blocked_until": blocked_until}), utc_now()),
+                        )
+                    except sqlite3.OperationalError:
+                        pass
+            else:
+                conn.execute("DELETE FROM login_attempts WHERE identity=?", (identity,))
+                conn.execute("UPDATE users SET last_login_at=?,updated_at=? WHERE id=?", (utc_now(), utc_now(), row["id"]))
+                user_id = int(row["id"])
+
+        # O erro é levantado somente depois de sair do contexto da conexão. Assim
+        # a contagem de tentativas e o alerta são COMMITados em vez de sofrerem
+        # rollback por causa da própria exceção de autenticação.
+        if failed_login:
+            audit(None, "auth.login_failed", "user", None, {"email": email}, self.client_ip())
+            raise ApiError(401, "E-mail ou senha inválidos.")
+        if user_id is None:
+            raise ApiError(401, "E-mail ou senha inválidos.")
         raw, csrf = create_session(user_id, int(load_config().get("session_hours", 12)))
         audit(user_id, "auth.login", "user", user_id, {}, self.client_ip())
         self.send_json(200, {"ok": True, "csrf_token": csrf}, {"Set-Cookie": self.session_cookie(raw)})
@@ -2949,7 +2978,7 @@ class OneCRMHandler(BaseHTTPRequestHandler):
                 "notes": {
                     "powerbi": "URL incorporada funcional.",
                     "webhook": "Eventos de venda são enviados por POST.",
-                    "evolution": "Credenciais armazenadas; conector específico depende da versão da API.",
+                    "evolution": "Configuração legada reservada. Nenhum fluxo do ONE CRM usa este conector enquanto não houver uma integração homologada.",
                     "ai": (
                         "O ONE Intelligence pode usar GroqCloud, OpenAI ou análise local. "
                         "As chaves são lidas apenas das variáveis do Railway."

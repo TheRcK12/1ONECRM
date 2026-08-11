@@ -2821,7 +2821,9 @@ def install_profiles(ns: dict[str, Any]) -> None:
         return None
 
     def api_users_list(self: Any) -> None:
-        actor = self.require_permission("users.view")
+        actor, _, _ = self.require_user()
+        if not (has_permission(actor, "users.view") or has_permission(actor, "users.manage")):
+            raise ApiError(403, "Sem permissão para visualizar funcionários.")
         pid = current_profile_id(actor)
         with db_connect() as conn:
             rows = conn.execute(
@@ -3276,7 +3278,18 @@ def install_profiles(ns: dict[str, Any]) -> None:
                    WHERE t.profile_id=? ORDER BY t.active DESC,t.name""",
                 (pid,),
             ).fetchall()
-        self.send_json(200, {"ok": True, "teams": [dict(row) for row in rows]})
+            manager_candidates = []
+            if has_permission(actor, "teams.manage"):
+                manager_candidates = [dict(row) for row in conn.execute(
+                    """SELECT u.id,u.name,pu.is_contractor,r.base_role
+                       FROM profile_users pu JOIN users u ON u.id=pu.user_id
+                       JOIN roles r ON r.code=pu.role_code
+                       WHERE pu.profile_id=? AND pu.active=1 AND u.active=1
+                         AND (r.base_role='manager' OR pu.is_contractor=1)
+                       ORDER BY pu.is_contractor DESC,u.name""",
+                    (pid,),
+                ).fetchall()]
+        self.send_json(200, {"ok": True, "teams": [dict(row) for row in rows], "manager_candidates": manager_candidates})
 
     def api_team_create(self: Any, actor: dict[str, Any]) -> None:
         if not has_permission(actor, "teams.manage"):
@@ -3798,7 +3811,9 @@ def install_profiles(ns: dict[str, Any]) -> None:
 
     # ------------------------- caixa -------------------------
     def api_cash(self: Any, query: dict[str, list[str]]) -> None:
-        user = self.require_permission("cash.view")
+        user, _, _ = self.require_user()
+        if not (has_permission(user, "cash.view") or has_permission(user, "cash.manage")):
+            raise ApiError(403, "Sem permissão para visualizar o caixa.")
         pid = current_profile_id(user)
         date_from = (query.get("date_from") or [""])[0]
         date_to = (query.get("date_to") or [""])[0]
@@ -3810,6 +3825,11 @@ def install_profiles(ns: dict[str, Any]) -> None:
         if date_to:
             filters.append("transaction_date<=?")
             params.append(date_to)
+        search = str((query.get("search") or [""])[0]).strip()
+        if search:
+            filters.append("(category LIKE ? OR description LIKE ? OR payment_method LIKE ? OR notes LIKE ?)")
+            term = f"%{search}%"
+            params.extend([term, term, term, term])
         where = " AND ".join(filters)
         with db_connect() as conn:
             rows = conn.execute(
@@ -3934,13 +3954,22 @@ def install_profiles(ns: dict[str, Any]) -> None:
                    GROUP BY COALESCE(NULLIF(status,''),'sem_status') ORDER BY total DESC""",
                 (pid, module),
             ).fetchall()
+            can_manage = can_manage_record_module(actor, module)
+            assignees = []
+            if can_manage and config.get("assigned_label") is not False:
+                assignees = [dict(row) for row in conn.execute(
+                    """SELECT u.id,u.name FROM profile_users pu JOIN users u ON u.id=pu.user_id
+                       WHERE pu.profile_id=? AND pu.active=1 AND u.active=1 ORDER BY u.name""",
+                    (pid,),
+                ).fetchall()]
         self.send_json(200, {
             "ok": True,
             "module": module,
             "config": config,
             "records": [serialize_record(row) for row in rows],
             "summary": {"total": sum(int(row["total"]) for row in status_rows), "by_status": [dict(row) for row in status_rows]},
-            "can_manage": can_manage_record_module(actor, module),
+            "can_manage": can_manage,
+            "assignees": assignees,
         })
 
     def normalize_record_payload(data: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
@@ -4082,7 +4111,10 @@ def install_profiles(ns: dict[str, Any]) -> None:
     def generic_dashboard(self: Any, user: dict[str, Any]) -> None:
         pid = current_profile_id(user)
         template = PROFILE_TEMPLATES.get(str(user.get("profile_type") or "custom"), PROFILE_TEMPLATES["custom"])
-        modules = [module for module in template.get("records", {}) if module in set(user.get("profile_modules", []))]
+        modules = [
+            module for module in template.get("records", {})
+            if module in set(user.get("profile_modules", [])) and can_view_record_module(user, module)
+        ]
         cards: list[dict[str, Any]] = []
         recent: list[dict[str, Any]] = []
         with db_connect() as conn:

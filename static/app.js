@@ -19,6 +19,15 @@ const state = {
   platformAccess: null,
   profileTemplates: [],
   cashTransactions: [],
+  productivityTasks: [],
+  productivityAssignees: [],
+  productivityRecipients: [],
+  productivityFormUsers: [],
+  productivityAutomationRules: [],
+  productivityForms: [],
+  productivityDashboards: [],
+  profileRecordAssignees: [],
+  teamManagerCandidates: [],
 };
 
 const $ = (selector, root = document) => root.querySelector(selector);
@@ -59,7 +68,13 @@ const UI_ICON_PATHS = {
   form:'<path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5"/><path d="M9 12h6M9 16h6"/>',
   alert:'<path d="M12 3 2.5 20h19L12 3Z"/><path d="M12 9v5M12 17h.01"/>',
   chevronDown:'<path d="m7 10 5 5 5-5"/>',
-  eye:'<path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z"/><circle cx="12" cy="12" r="2.5"/>'
+  eye:'<path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z"/><circle cx="12" cy="12" r="2.5"/>',
+  file:'<path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5"/>',
+  download:'<path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/>',
+  trash:'<path d="M4 7h16"/><path d="M9 7V4h6v3"/><path d="m7 7 1 14h8l1-14"/><path d="M10 11v6M14 11v6"/>',
+  play:'<path d="m8 5 11 7-11 7V5Z"/>',
+  rotate:'<path d="M20 6v5h-5"/><path d="M19 11a7 7 0 1 0 1 5"/>',
+  mail:'<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/>'
 };
 function uiIcon(name, size=16, extraClass='') {
   const path = UI_ICON_PATHS[name] || UI_ICON_PATHS.module;
@@ -133,7 +148,7 @@ const activeModules = () => new Set(activeProfile().modules || []);
 const routeModuleMap = {dashboard:'dashboard',sales:'sales','new-sale':'sales',bko:'bko',daily:'daily',powerbi:'powerbi',ranking:'ranking',intelligence:'intelligence',users:'users',teams:'teams',plans:'plans',catalogs:'catalogs',roles:'roles',audit:'audit',backups:'backups',integrations:'integrations',cash:'cash','profile-settings':'users'};
 const moduleEnabled = route => {
   if (['profiles', 'platform-access', 'backups'].includes(route)) return isPlatformOwner();
-  if (route === 'work-center') return true;
+  if (route === 'work-center' || route === 'documents') return true;
   if (route === 'plans') return activeModules().has('plans') || activeModules().has('services_catalog');
   return activeModules().has(routeModuleMap[route] || route);
 };
@@ -391,6 +406,23 @@ async function api(path, options={}) {
   return data;
 }
 
+async function downloadProtectedFile(path, fallbackName='arquivo') {
+  const headers={'Accept':'application/octet-stream'};
+  const response=await fetch(path,{headers,credentials:'same-origin'});
+  if(!response.ok){
+    const contentType=response.headers.get('content-type')||'';
+    const data=contentType.includes('application/json')?await response.json():await response.text();
+    throw new Error(data?.error||data||`Erro HTTP ${response.status}`);
+  }
+  const blob=await response.blob();
+  const disposition=response.headers.get('content-disposition')||'';
+  const match=disposition.match(/filename="?([^";]+)"?/i);
+  const name=match?.[1]||fallbackName;
+  const url=URL.createObjectURL(blob);
+  const anchor=document.createElement('a');anchor.href=url;anchor.download=name;document.body.appendChild(anchor);anchor.click();anchor.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),1200);
+}
+
 function formObject(form) {
   const data = Object.fromEntries(new FormData(form).entries());
   $$('input[type=checkbox]', form).forEach(input => data[input.name] = input.checked);
@@ -466,7 +498,7 @@ async function ensureReferenceData() {
   const calls = [];
   if (!Object.keys(state.catalogs).length) calls.push(api('/api/catalogs').then(r => state.catalogs = r.catalogs));
   if (!state.plans.length) calls.push(api('/api/plans').then(r => state.plans = r.plans));
-  if ((has('users.view') || has('sales.all') || has('workflow.bko')) && !state.users.length) calls.push(api('/api/users').then(r => state.users = r.users).catch(()=>{}));
+  if ((has('users.view') || has('users.manage') || has('sales.all') || has('workflow.bko')) && !state.users.length) calls.push(api('/api/users').then(r => state.users = r.users).catch(()=>{}));
   if (!state.teams.length) calls.push(api('/api/teams').then(r => state.teams = r.teams).catch(()=>{}));
   await Promise.all(calls);
 }
@@ -492,13 +524,14 @@ const genericOperationItems = genericOperationIds.map(id=>({
   id,label:id.replaceAll('_',' '),icon:'module',test:()=>has(`${id}.view`)||has(`${id}.manage`)
 }));
 const financeNavigationItems = [
-  {id:'cash',label:'Caixa',icon:'wallet',permission:'cash.view'},
+  {id:'cash',label:'Caixa',icon:'wallet',test:()=>has('cash.view')||has('cash.manage')},
   {id:'accounts_payable',label:'Contas a pagar',icon:'wallet',test:()=>has('accounts_payable.view')||has('accounts_payable.manage')},
   {id:'accounts_receivable',label:'Contas a receber',icon:'wallet',test:()=>has('accounts_receivable.view')||has('accounts_receivable.manage')},
 ];
 
 const productivityNavigationItems = [
-  {id:'work-center',label:'Central de produtividade',icon:'checkSquare',test:()=>has('tasks.view')||has('tasks.manage')||has('reports.manage')},
+  {id:'work-center',label:'Central de produtividade',icon:'checkSquare',test:()=>Boolean(activeProfile()?.id)},
+  {id:'documents',label:'Documentos',icon:'file',test:()=>has('attachments.manage')},
 ];
 
 const insightsNavigationItems = [
@@ -515,7 +548,7 @@ const platformNavigationItems = [
 
 const administrativeNavigationItems = [
   {id:'profile-settings',label:'Perfil atual',icon:'user',test:()=>isPlatformOwner()||has('profile.view')},
-  {id:'users',label:'Funcionários',icon:'users',permission:'users.view'},
+  {id:'users',label:'Funcionários',icon:'users',test:()=>has('users.view')||has('users.manage')},
   {id:'teams',label:'Equipes',icon:'team',test:()=>has('teams.view')||has('teams.manage')},
   {id:'plans',label:'Planos e serviços',icon:'package',test:()=>has('plans.view')||has('plans.manage')},
   {id:'catalogs',label:'Catálogos',icon:'catalog',test:()=>has('catalogs.view')||has('catalogs.manage')},
@@ -564,7 +597,7 @@ function navigationDescription(item) {
     catalogs:'Opções usadas nos formulários',roles:'Limites de cada cargo',audit:'Histórico de alterações',
     backups:'Proteção do banco de dados',integrations:'Power BI, webhook, WhatsApp e IA',
     profiles:'Ambientes isolados da plataforma','platform-access':'Donos, administradores e equipe interna',cash:'Entradas, saídas e saldo',
-    'profile-settings':'Identidade e módulos do perfil atual'
+    'profile-settings':'Identidade e módulos do perfil atual',documents:'Arquivos e documentos do perfil'
   };
   return descriptions[item.id] || 'Abrir módulo';
 }
@@ -663,7 +696,7 @@ async function renderRoute() {
       bko: renderBko,
       daily: () => renderDaily(params),
       ranking: () => renderRanking(params),
-      cash: renderCash,
+      cash: () => renderCash(params),
       intelligence: renderIntelligence,
       powerbi: renderPowerBI,
       users: renderUsers,
@@ -677,6 +710,7 @@ async function renderRoute() {
       'profile-settings': renderProfileSettings,
       account: renderAccount,
       'work-center': renderWorkCenter,
+      documents: renderDocuments,
     };
     if (genericOperationIds.includes(route) || ['accounts_payable','accounts_receivable'].includes(route)) {
       return renderProfileRecords(route, params);
@@ -687,6 +721,35 @@ async function renderRoute() {
     $('#content').innerHTML = `<div class="panel"><div class="empty"><strong>Não foi possível carregar esta página.</strong><p>${esc(error.message)}</p></div></div>`;
     toast(error.message,'error');
   }
+}
+
+function accountActionFromHash(){
+  const raw=String(location.hash||'');
+  const query=raw.includes('?')?raw.slice(raw.indexOf('?')+1):'';
+  const params=new URLSearchParams(query);
+  const action=params.get('action')||'';
+  const token=params.get('token')||'';
+  return ['accept-invite','reset-password'].includes(action)&&token?{action,token}:null;
+}
+
+function openAccountTokenCompletion(actionData){
+  const invite=actionData.action==='accept-invite';
+  modal(invite?'Ativar acesso':'Definir nova senha',`<form id="token-complete-form" class="form-grid">
+    <div class="full token-complete-intro"><strong>${invite?'Seu convite está pronto':'Crie uma nova senha'}</strong><p>${invite?'Defina sua senha para ativar a conta e entrar no ONE CRM.':'A nova senha substituirá a senha anterior e encerrará sessões antigas.'}</p></div>
+    <label class="full">Nova senha<input name="password" type="password" required minlength="8" autocomplete="new-password" placeholder="Mínimo de 8 caracteres, com letra e número"></label>
+    <label class="full">Confirmar senha<input name="confirm_password" type="password" required minlength="8" autocomplete="new-password"></label>
+    <div class="full form-actions"><button class="btn primary" type="submit">${invite?'Ativar minha conta':'Salvar nova senha'}</button></div>
+  </form>`,{wide:false});
+  const form=$('#token-complete-form');
+  form.addEventListener('submit',async event=>{
+    event.preventDefault();const data=formObject(form);
+    if(data.password!==data.confirm_password){toast('As senhas não conferem.','error');return;}
+    try{
+      const result=await api('/api/account/token-complete',{method:'POST',body:{token:actionData.token,password:data.password}});
+      closeModal();history.replaceState(null,'',location.pathname+location.search);showAuth(false,false);toast(result.message||'Senha definida. Entre com seu e-mail.');
+      setTimeout(()=>$('#login-form input[name="email"]')?.focus(),100);
+    }catch(error){toast(error.message,'error');}
+  });
 }
 
 async function boot() {
@@ -703,6 +766,8 @@ async function boot() {
       showApp();
     } else {
       showAuth(data.setup_required, data.setup_token_required);
+      const actionData=accountActionFromHash();
+      if(actionData&&!data.setup_required) setTimeout(()=>openAccountTokenCompletion(actionData),60);
     }
   } catch (error) {
     document.body.innerHTML = `<main class="auth-screen"><section class="auth-card"><h1>ONE CRM não respondeu</h1><p>${esc(error.message)}</p><p class="muted">Verifique a janela do servidor e o arquivo logs/one_crm.log.</p></section></main>`;
@@ -752,6 +817,11 @@ function refreshUserUi() {
   $('#user-name').textContent = visibleName;
   $('#user-role').textContent = state.user.role_name || roleLabel(state.user.role_code);
   $('#user-initials').textContent = initials(visibleName);
+  const searchCopy=$('#global-search-btn span');
+  if(searchCopy){
+    const generic=genericOperationIds.some(id=>activeModules().has(id)&&(has(`${id}.view`)||has(`${id}.manage`)));
+    searchCopy.textContent=activeModules().has('sales')?'Buscar cliente, CPF, telefone ou OS':activeModules().has('cash')?'Buscar lançamentos do caixa':generic?'Buscar registros do perfil':'Pesquisar no perfil';
+  }
   state.profiles = state.user.profiles || [];
   const switcher = $('#profile-switcher');
   if (switcher) {
@@ -767,7 +837,7 @@ function refreshUserUi() {
           const bootData = await api('/api/bootstrap');
           state.user = bootData.user; state.csrf = bootData.csrf_token;
           state.catalogs={};state.plans=[];state.users=[];state.teams=[];state.roles=[];state.baseRoles=[];state.cashTransactions=[];
-          state.productivityAutomationRules=[];state.productivityForms=[];state.productivityDashboards=[];
+          state.productivityTasks=[];state.productivityAssignees=[];state.productivityRecipients=[];state.productivityFormUsers=[];state.productivityAutomationRules=[];state.productivityForms=[];state.productivityDashboards=[];state.profileRecordAssignees=[];state.teamManagerCandidates=[];
           state.profiles = state.user.profiles || [];
           applyUserAppearance(state.user);
           refreshUserUi();
@@ -878,10 +948,32 @@ document.addEventListener('click',event=>{
 window.addEventListener('resize',closeNavigationPopover);
 window.addEventListener('scroll',closeNavigationPopover,true);
 
-function openGlobalSearch() {
-  modal('Pesquisa global', `<form id="global-search-form" class="form-stack"><label>Cliente, CPF, telefone ou OS<input name="search" autofocus placeholder="Digite para pesquisar"></label><button class="btn primary">Pesquisar vendas</button></form>`);
+async function openGlobalSearch() {
+  const profileModules=activeModules();
+  if(profileModules.has('sales')&&(has('sales.own')||has('sales.all')||baseRole(state.user)==='bko')){
+    modal('Pesquisa global', `<form id="global-search-form" class="form-stack"><label>Cliente, CPF, telefone ou OS<input name="search" autofocus placeholder="Digite para pesquisar"></label><button class="btn primary">Pesquisar vendas</button></form>`);
+    setTimeout(()=>$('#global-search-form input')?.focus(),50);
+    $('#global-search-form').addEventListener('submit',e=>{e.preventDefault();const value=new FormData(e.currentTarget).get('search');closeModal();navigate('sales',qs({search:value}));});
+    return;
+  }
+  if(profileModules.has('cash')&&has('cash.view')){
+    modal('Pesquisar no caixa',`<form id="global-search-form" class="form-stack"><label>Categoria, descrição, pagamento ou observação<input name="search" autofocus placeholder="Ex.: aluguel, PIX, fornecedor..."></label><button class="btn primary">Pesquisar lançamentos</button></form>`);
+    setTimeout(()=>$('#global-search-form input')?.focus(),50);
+    $('#global-search-form').addEventListener('submit',e=>{e.preventDefault();const value=String(new FormData(e.currentTarget).get('search')||'').trim();closeModal();navigate('cash',qs({search:value}));});
+    return;
+  }
+  const modules=genericOperationIds.filter(id=>profileModules.has(id)&&(has(`${id}.view`)||has(`${id}.manage`)));
+  if(!modules.length){toast('Não há módulos pesquisáveis neste perfil.','error');return;}
+  modal('Pesquisa global',`<form id="global-search-form" class="global-search-layout"><label>Buscar em ${modules.length} módulo(s)<input name="search" autofocus minlength="2" required placeholder="Digite nome, documento, código ou observação"></label><button class="btn primary">Pesquisar</button><div id="global-search-results" class="global-search-results"><div class="empty compact-empty">Digite pelo menos 2 caracteres.</div></div></form>`,{wide:true});
   setTimeout(()=>$('#global-search-form input')?.focus(),50);
-  $('#global-search-form').addEventListener('submit',e=>{e.preventDefault();const value=new FormData(e.currentTarget).get('search');closeModal();navigate('sales',qs({search:value}));});
+  $('#global-search-form').addEventListener('submit',async event=>{
+    event.preventDefault();const value=String(new FormData(event.currentTarget).get('search')||'').trim();if(value.length<2)return;
+    const results=$('#global-search-results');results.innerHTML='<div class="loader compact-loader">Pesquisando...</div>';
+    const responses=await Promise.all(modules.map(async module=>{try{const data=await api(`/api/profile-records?${qs({module,search:value})}`);return {module,config:data.config,records:(data.records||[]).slice(0,20)};}catch(_error){return {module,records:[]};}}));
+    const groups=responses.filter(group=>group.records.length);
+    results.innerHTML=groups.length?groups.map(group=>`<section class="global-search-group"><header><strong>${esc(group.config?.label||humanizeCode(group.module))}</strong><small>${group.records.length} resultado(s)</small></header>${group.records.map(record=>`<button type="button" class="global-search-result" data-global-result-route="${esc(group.module)}" data-global-result-search="${esc(value)}"><span><strong>${esc(record.title)}</strong><small>${esc(record.subtitle||record.status||'Registro')}</small></span><b>→</b></button>`).join('')}</section>`).join(''):'<div class="empty compact-empty">Nenhum registro encontrado neste perfil.</div>';
+    $$('[data-global-result-route]',results).forEach(button=>button.addEventListener('click',()=>{closeModal();navigate(button.dataset.globalResultRoute,qs({search:button.dataset.globalResultSearch}));}));
+  });
 }
 
 function dashboardViewStorageKey(){
@@ -955,7 +1047,7 @@ function dashboardUnavailableWidget(title,message){
 
 function dashboardTasksWidgetHtml(taskData){
   if(!taskData) return dashboardUnavailableWidget('Tarefas','Seu cargo não possui acesso às tarefas deste perfil.');
-  const tasks=taskData.tasks||[]; const open=tasks.filter(item=>item.status!=='done'); const overdue=open.filter(item=>item.overdue);
+  const tasks=taskData.tasks||[]; const open=tasks.filter(item=>!['done','cancelled'].includes(item.status)); const overdue=open.filter(item=>item.overdue);
   return `<section class="dashboard-widget"><header class="dashboard-widget-head"><div><span>PRODUTIVIDADE</span><h3>Tarefas</h3></div><div class="dashboard-widget-count"><strong>${open.length}</strong><small>abertas${overdue.length?` · ${overdue.length} atrasada(s)`:''}</small></div></header><div class="dashboard-widget-body"><div class="dashboard-compact-list">${open.slice(0,6).map(task=>`<article><div><strong>${esc(task.title)}</strong><small>${esc(task.assigned_name||'Sem responsável')} · ${fmtDateTime(task.due_at)}</small></div>${badge(task.overdue?'Atrasada':(productivityStatusLabels[task.status]||task.status),task.overdue?'red':'cyan')}</article>`).join('')||'<div class="dashboard-widget-empty">Nenhuma tarefa aberta.</div>'}</div></div><footer class="dashboard-widget-foot"><button type="button" class="btn small ghost" data-route="work-center">Abrir produtividade</button></footer></section>`;
 }
 
@@ -985,10 +1077,10 @@ function dashboardSecurityWidgetHtml(alertData){
 async function renderConfiguredDashboard(data,view,views,visibleName){
   const widgets=new Set(view?.config?.widgets||[]);
   const [taskData,notificationData,automationData,formData,alertData]=await Promise.all([
-    widgets.has('tasks')&&has('tasks.view')?api('/api/tasks').catch(()=>null):Promise.resolve(null),
+    widgets.has('tasks')&&(has('tasks.view')||has('tasks.manage'))?api('/api/tasks').catch(()=>null):Promise.resolve(null),
     widgets.has('notifications')?api('/api/notifications').catch(()=>({notifications:[],unread:0})):Promise.resolve(null),
     widgets.has('automations')&&has('automations.manage')?api('/api/automations').catch(()=>null):Promise.resolve(null),
-    widgets.has('forms')&&has('forms.manage')?api('/api/custom-forms').catch(()=>null):Promise.resolve(null),
+    widgets.has('forms')&&(has('forms.view')||has('forms.submit')||has('forms.manage'))?api('/api/custom-forms').catch(()=>null):Promise.resolve(null),
     widgets.has('security')&&has('security.alerts')?api('/api/security-alerts').catch(()=>null):Promise.resolve(null),
   ]);
   const widgetHtml=[];
@@ -1025,7 +1117,7 @@ async function renderDashboard() {
   if (data.profile_type === 'cash_control') {
     const c = data.cash;
     $('#content').innerHTML = `${viewBar}
-      <section class="dashboard-hero"><div><p class="eyebrow">CONTROLE FINANCEIRO</p><h1>Olá, ${esc(visibleName)}</h1><p>Saldo e movimentações do perfil ${esc(activeProfile().name||'')}.</p></div><div class="dashboard-hero-actions"><button class="btn primary" id="dashboard-new-cash">＋ Novo lançamento</button><button class="btn" id="dashboard-view-cash">Abrir caixa</button></div></section>
+      <section class="dashboard-hero"><div><p class="eyebrow">CONTROLE FINANCEIRO</p><h1>Olá, ${esc(visibleName)}</h1><p>Saldo e movimentações do perfil ${esc(activeProfile().name||'')}.</p></div><div class="dashboard-hero-actions">${has('cash.manage')?'<button class="btn primary" id="dashboard-new-cash">＋ Novo lançamento</button>':''}<button class="btn" id="dashboard-view-cash">Abrir caixa</button></div></section>
       <section class="dashboard-metrics">
         <article class="stat-card compact" style="--accent:var(--green)"><div class="stat-top"><span>Entradas totais</span><span class="stat-icon">＋</span></div><div class="stat-value">${money(c.entries)}</div><div class="stat-note">${money(c.month_entries)} neste mês</div></article>
         <article class="stat-card compact" style="--accent:var(--red)"><div class="stat-top"><span>Saídas totais</span><span class="stat-icon">−</span></div><div class="stat-value">${money(c.exits)}</div><div class="stat-note">${money(c.month_exits)} neste mês</div></article>
@@ -1760,7 +1852,7 @@ async function switchProfile(profileId) {
   await api('/api/profiles/switch',{method:'POST',body:{profile_id:profileId}});
   const data = await api('/api/bootstrap');
   state.user=data.user;state.csrf=data.csrf_token;state.catalogs={};state.plans=[];state.users=[];state.teams=[];state.roles=[];state.baseRoles=[];
-  state.productivityAutomationRules=[];state.productivityForms=[];state.productivityDashboards=[];
+  state.productivityTasks=[];state.productivityAssignees=[];state.productivityRecipients=[];state.productivityFormUsers=[];state.productivityAutomationRules=[];state.productivityForms=[];state.productivityDashboards=[];state.profileRecordAssignees=[];state.teamManagerCandidates=[];
   refreshUserUi(); navigate('dashboard'); await renderRoute();
 }
 
@@ -1923,6 +2015,7 @@ async function renderProfileRecords(module,params=new URLSearchParams()) {
   const data=await api(`/api/profile-records?${qs({module,all:1,search})}`);
   const records=data.records||[];
   const canManage=Boolean(data.can_manage);
+  state.profileRecordAssignees=data.assignees||[];
   const summary=data.summary||{total:records.length,by_status:[]};
   $('#content').innerHTML=`<div class="page-head"><div><h1>${esc(config.label)}</h1><p class="muted">${esc(config.description||'Registros exclusivos deste perfil.')}</p></div>${canManage?`<button class="btn primary" id="new-profile-record">＋ Novo ${esc(String(config.singular||'registro').toLowerCase())}</button>`:badge('Somente leitura','cyan')}</div>
     <section class="record-summary-strip"><article><small>Total</small><strong>${summary.total||0}</strong></article>${(summary.by_status||[]).slice(0,4).map(item=>`<article><small>${esc(recordStatusLabel(config,item.status))}</small><strong>${item.total}</strong></article>`).join('')}</section>
@@ -1935,7 +2028,7 @@ async function openProfileRecordForm(module,id=null,records=[]) {
   await ensureReferenceData();
   const config=activeRecordConfig(module);
   const item=id?records.find(row=>row.id===id):{};
-  const assigned=state.users||[];
+  const assigned=(state.profileRecordAssignees?.length?state.profileRecordAssignees:state.users)||[];
   const references=await loadRecordReferences(config);
   const showAssigned=config.assigned_label!==false;
   const showDue=recordUsesDue(config);
@@ -1970,14 +2063,21 @@ function cashTable(rows) {
   return `<div class="table-wrap"><table class="data-table"><thead><tr><th>Data</th><th>Tipo</th><th>Categoria</th><th>Descrição</th><th>Valor</th><th></th></tr></thead><tbody>${rows.map(item=>`<tr><td>${fmtDate(item.transaction_date)}</td><td>${item.transaction_type==='entry'?badge('Entrada','ok'):badge('Saída','cancelada')}</td><td>${esc(item.category)}</td><td><div class="cell-main">${esc(item.description)}</div><div class="cell-sub">${esc(item.payment_method||'')}</div></td><td class="money-cell ${item.transaction_type==='entry'?'positive':'negative'}">${item.transaction_type==='entry'?'+':'−'} ${money(item.amount)}</td><td>${has('cash.manage')?`<button class="btn small" data-cash-edit="${item.id}">Editar</button>`:''}</td></tr>`).join('')}</tbody></table></div>`;
 }
 
-async function renderCash() {
+async function renderCash(params=new URLSearchParams()) {
   setPage('Controle de caixa','FINANCEIRO');
-  const data=await api('/api/cash');state.cashTransactions=data.transactions||[];
+  const search=params.get('search')||'';
+  const dateFrom=params.get('date_from')||'';
+  const dateTo=params.get('date_to')||'';
+  const query=qs({search,date_from:dateFrom,date_to:dateTo});
+  const data=await api(`/api/cash${query?'?'+query:''}`);state.cashTransactions=data.transactions||[];
   const c=data.summary;
   $('#content').innerHTML=`<div class="page-head"><div><h1>Caixa</h1><p class="muted">Movimentações exclusivas do perfil ${esc(activeProfile().name||'')}.</p></div>${has('cash.manage')?'<button class="btn primary" id="new-cash">＋ Novo lançamento</button>':''}</div>
+    <form id="cash-filter-form" class="filters cash-filters"><input name="search" value="${esc(search)}" placeholder="Buscar descrição, categoria ou pagamento"><label>De<input type="date" name="date_from" value="${esc(dateFrom)}"></label><label>Até<input type="date" name="date_to" value="${esc(dateTo)}"></label><button class="btn">Filtrar</button>${search||dateFrom||dateTo?'<button type="button" class="btn ghost" id="clear-cash-filters">Limpar</button>':''}</form>
     <section class="dashboard-metrics"><article class="stat-card compact" style="--accent:var(--green)"><div class="stat-top"><span>Entradas</span></div><div class="stat-value">${money(c.entries)}</div></article><article class="stat-card compact" style="--accent:var(--red)"><div class="stat-top"><span>Saídas</span></div><div class="stat-value">${money(c.exits)}</div></article><article class="stat-card compact" style="--accent:var(--cyan)"><div class="stat-top"><span>Saldo</span></div><div class="stat-value">${money(c.balance)}</div></article></section>
     <section class="panel"><header class="panel-head"><h3>Lançamentos</h3><span class="muted">${state.cashTransactions.length} registro(s)</span></header>${cashTable(state.cashTransactions)}</section>`;
   $('#new-cash')?.addEventListener('click',()=>openCashForm());
+  $('#cash-filter-form').addEventListener('submit',event=>{event.preventDefault();const data=formObject(event.currentTarget);navigate('cash',qs({search:data.search,date_from:data.date_from,date_to:data.date_to}));});
+  $('#clear-cash-filters')?.addEventListener('click',()=>navigate('cash'));
   $$('[data-cash-edit]').forEach(button=>button.addEventListener('click',()=>openCashForm(Number(button.dataset.cashEdit))));
 }
 
@@ -2020,10 +2120,12 @@ async function renderUsers() {
   const [u,t,r]=await Promise.all([api('/api/users'),api('/api/teams'),loadRoles()]);
   state.users=u.users;state.teams=t.teams;state.roles=r.roles||[];
   $('#content').innerHTML=`
-    <div class="page-head"><div><h1>Funcionários</h1><p class="muted">Cargos controlam o acesso no servidor, não apenas os botões.</p></div>${has('users.manage')?'<button class="btn primary" id="new-user">＋ Novo usuário</button>':''}</div>
+    <div class="page-head"><div><h1>Funcionários</h1><p class="muted">Cargos controlam o acesso no servidor, não apenas os botões.</p></div><div class="page-actions">${has('invitations.manage')||has('users.manage')?'<button class="btn" id="invite-user">'+uiIcon('mail',14)+'<span>Convidar por e-mail</span></button>':''}${has('users.manage')?'<button class="btn primary" id="new-user">＋ Novo usuário</button>':''}</div></div>
     <section class="panel"><div class="table-wrap"><table class="data-table"><thead><tr><th>Usuário</th><th>Cargo</th><th>Equipe</th><th>Status</th><th>Último acesso</th><th></th></tr></thead><tbody>${state.users.map(u=>`<tr><td><div class="cell-main">${esc(u.name)}</div><div class="cell-sub">${esc(u.email)}</div></td><td>${badge(u.role_name||roleLabel(u.role_code),u.base_role||u.role_code)}${u.is_contractor?' <span class="badge violet">Contratante</span>':''}${u.platform_role_code?' <span class="badge cyan">Equipe da Plataforma</span>':''}</td><td>${esc(u.team_name||'-')}</td><td>${u.active?badge('Ativo','ok'):badge('Bloqueado','cancelada')}</td><td>${fmtDateTime(u.last_login_at)}</td><td>${has('users.manage')?`<button type="button" class="btn small" data-user-edit="${u.id}">Editar</button>`:''}</td></tr>`).join('')}</tbody></table></div></section>`;
   $('#new-user')?.addEventListener('click',()=>openUserForm());
+  $('#invite-user')?.addEventListener('click',()=>openInviteUserForm());
 }
+
 
 function openUserForm(id=null) {
   const user=id?state.users.find(x=>x.id===id):{};
@@ -2046,10 +2148,33 @@ function openUserForm(id=null) {
   $('#user-form').addEventListener('submit',async e=>{e.preventDefault();try{const payload=formObject(e.currentTarget);if(id&&!payload.password)delete payload.password;await api(id?`/api/users/${id}`:'/api/users',{method:id?'PUT':'POST',body:payload});closeModal();state.users=[];toast('Usuário salvo.');renderUsers();}catch(error){toast(error.message,'error');}});
 }
 
+function openInviteUserForm(){
+  const roles=(state.roles||[]).filter(role=>role.active&&role.base_role!=='owner');
+  modal('Convidar funcionário',`<form id="invite-user-form" class="form-grid">
+    <div class="full invite-intro"><strong>Acesso por convite</strong><p>O funcionário recebe um link para definir a própria senha. Se o e-mail já possuir conta, o acesso ao perfil é liberado sem trocar a senha atual.</p></div>
+    <label>Nome<input name="name" required minlength="2" autocomplete="name"></label>
+    <label>E-mail<input name="email" type="email" required autocomplete="email"></label>
+    <label>Cargo<select name="role_code" required>${roles.map(role=>`<option value="${esc(role.code)}">${esc(role.name)}</option>`).join('')}</select></label>
+    <label>Equipe<select name="team_id">${optionList(state.teams,'','Sem equipe')}</select></label>
+    <div class="full form-actions"><button class="btn ghost" type="button" data-close-modal>Cancelar</button><button class="btn primary" type="submit">Enviar convite</button></div>
+  </form>`);
+  $('#invite-user-form').addEventListener('submit',async event=>{
+    event.preventDefault();const payload=formObject(event.currentTarget);payload.team_id=Number(payload.team_id||0)||null;
+    try{
+      const result=await api('/api/invitations',{method:'POST',body:payload});
+      closeModal();state.users=[];
+      if(result.invite_url){
+        modal('Convite criado',`<div class="invite-link-result"><div><strong>O e-mail não foi enviado automaticamente.</strong><p>Copie este link e envie ao funcionário por um canal seguro.</p></div><label>Link de acesso<input id="invite-link-value" readonly value="${esc(result.invite_url)}"></label><div class="form-actions"><button class="btn" type="button" id="copy-invite-link">Copiar link</button><button class="btn primary" type="button" data-close-modal>Concluir</button></div></div>`);
+        $('#copy-invite-link').addEventListener('click',async()=>{try{await navigator.clipboard.writeText(result.invite_url);toast('Link copiado.');}catch(_){$('#invite-link-value').select();document.execCommand('copy');toast('Link copiado.');}});
+      } else toast(result.message||'Convite enviado.');
+    }catch(error){toast(error.message,'error');}
+  });
+}
+
 async function renderTeams() {
   setPage('Equipes','ESTRUTURA COMERCIAL');
   const [t,u]=await Promise.all([api('/api/teams'),api('/api/users').catch(()=>({users:[]}))]);
-  state.teams=t.teams;if(u.users?.length)state.users=u.users;
+  state.teams=t.teams;state.teamManagerCandidates=t.manager_candidates||[];if(u.users?.length)state.users=u.users;
   $('#content').innerHTML=`
     <div class="page-head"><div><h1>Equipes</h1><p class="muted">Metas e responsáveis configurados sem editar arquivos.</p></div>${has('teams.manage')?'<button class="btn primary" id="new-team">＋ Nova equipe</button>':''}</div>
     <div class="grid-3">${state.teams.map(t=>`<article class="team-card"><div style="display:flex;justify-content:space-between"><h4>${esc(t.name)}</h4>${t.active?badge('Ativa','ok'):badge('Inativa','cancelada')}</div><div class="metric-row"><span>Gerente</span><strong>${esc(t.manager_name||'-')}</strong></div><div class="metric-row"><span>Funcionários</span><strong>${t.members}</strong></div><div class="metric-row"><span>Meta mensal</span><strong>${t.monthly_target}</strong></div>${has('teams.manage')?`<button type="button" class="btn small" data-team-edit="${t.id}">Editar</button>`:''}</article>`).join('')}</div>`;
@@ -2058,7 +2183,7 @@ async function renderTeams() {
 
 function openTeamForm(id=null) {
   const team=id?state.teams.find(x=>x.id===id):{};
-  const managers=state.users.filter(u=>u.active&&['manager','owner'].includes(baseRole(u)));
+  const managers=(state.teamManagerCandidates?.length?state.teamManagerCandidates:state.users.filter(u=>u.active&&['manager','owner'].includes(baseRole(u))));
   modal(id?'Editar equipe':'Nova equipe',`<form id="team-form" class="form-grid">
     <label>Nome<input name="name" required value="${esc(team?.name||'')}"></label>
     <label>Gerente<select name="manager_id">${optionList(managers,team?.manager_id,'Sem gerente')}</select></label>
@@ -2215,15 +2340,35 @@ async function renderAudit() {
     <section class="panel"><div class="table-wrap"><table class="data-table"><thead><tr><th>Data</th><th>Usuário</th><th>Ação</th><th>Entidade</th><th>Detalhes</th><th>IP</th></tr></thead><tbody>${data.logs.map(l=>`<tr><td>${fmtDateTime(l.created_at)}</td><td>${esc(l.user_name||'Sistema')}</td><td class="code">${esc(l.action)}</td><td>${esc(l.entity_type||'-')} ${esc(l.entity_id||'')}</td><td><div class="cell-sub" style="max-width:420px;white-space:pre-wrap">${esc(l.details||'')}</div></td><td>${esc(l.ip_address||'-')}</td></tr>`).join('')}</tbody></table></div></section>`;
 }
 
+function formatFileSize(bytes){
+  const value=Number(bytes||0);if(value<1024)return `${value} B`;if(value<1024*1024)return `${(value/1024).toFixed(1)} KB`;return `${(value/1024/1024).toFixed(2)} MB`;
+}
+async function renderDocuments(){
+  if(!has('attachments.manage'))return navigate('dashboard');
+  setPage('Documentos','ARQUIVOS DO PERFIL');
+  const data=await api('/api/attachments');
+  const files=data.attachments||[];
+  $('#content').innerHTML=`
+    <div class="page-head"><div><h1>Documentos</h1><p class="muted">Arquivos isolados no perfil <strong>${esc(activeProfile().name||'atual')}</strong>.</p></div><button class="btn primary" id="upload-document">${uiIcon('plus',14)}<span>Enviar documento</span></button></div>
+    <section class="panel"><div class="table-wrap"><table class="data-table"><thead><tr><th>Arquivo</th><th>Origem</th><th>Tamanho</th><th>Enviado por</th><th>Data</th><th>Ações</th></tr></thead><tbody>${files.map(file=>`<tr><td><div class="cell-main">${esc(file.original_name)}</div><div class="cell-sub code">${esc(String(file.sha256||'').slice(0,16))}…</div></td><td>${esc(file.entity_type==='general'?'Documento geral':file.entity_type)}${file.entity_id?` #${file.entity_id}`:''}</td><td>${formatFileSize(file.size_bytes)}</td><td>${esc(file.uploaded_by_name||'-')}</td><td>${fmtDateTime(file.created_at)}</td><td><div class="actions"><button class="btn small" type="button" data-doc-download="${file.id}" data-doc-name="${esc(file.original_name)}">${uiIcon('download',13)} Baixar</button><button class="btn small danger" type="button" data-doc-delete="${file.id}">${uiIcon('trash',13)} Excluir</button></div></td></tr>`).join('')||'<tr><td colspan="6"><div class="empty">Nenhum documento enviado.</div></td></tr>'}</tbody></table></div></section>`;
+  $('#upload-document').addEventListener('click',()=>{
+    modal('Enviar documento',`<form id="document-upload-form" class="form-grid"><div class="full upload-dropzone"><span>${uiIcon('file',26)}</span><strong>Escolha um arquivo</strong><p>PDF, imagem, TXT, CSV, Excel ou Word. Máximo de 5 MB.</p><input type="file" name="file" required accept=".pdf,.png,.jpg,.jpeg,.webp,.txt,.csv,.xlsx,.docx"></div><div class="full form-actions"><button class="btn ghost" type="button" data-close-modal>Cancelar</button><button class="btn primary" type="submit">Enviar</button></div></form>`);
+    $('#document-upload-form').addEventListener('submit',async event=>{event.preventDefault();const file=event.currentTarget.elements.file.files?.[0];if(!file)return;try{await uploadAttachmentFile(file,'general',0);closeModal();toast('Documento enviado.');renderDocuments();}catch(error){toast(error.message,'error');}});
+  });
+  $$('[data-doc-download]').forEach(button=>button.addEventListener('click',()=>downloadProtectedFile(`/api/attachments/${button.dataset.docDownload}`,button.dataset.docName).catch(error=>toast(error.message,'error'))));
+  $$('[data-doc-delete]').forEach(button=>button.addEventListener('click',async()=>{if(!confirm('Excluir este documento permanentemente?'))return;try{await api(`/api/attachments/${button.dataset.docDelete}`,{method:'DELETE'});toast('Documento excluído.');renderDocuments();}catch(error){toast(error.message,'error');}}));
+}
+
 async function renderBackups() {
   if (!isPlatformOwner()) return navigate('dashboard');
   setPage('Backups','PROTEÇÃO GLOBAL DO BANCO');
   const data=await api('/api/backups');
   $('#content').innerHTML=`
     <div class="page-head"><div><h1>Backups da plataforma</h1><p class="muted">Área global exclusiva do Dono. O sistema cria um backup diário ao iniciar e permite cópias manuais.</p></div><button class="btn primary" id="create-backup">Criar backup agora</button></div>
-    <section class="panel"><div class="table-wrap"><table class="data-table"><thead><tr><th>Arquivo</th><th>Tamanho</th><th>Modificado em</th></tr></thead><tbody>${data.backups.map(b=>`<tr><td class="code">${esc(b.name)}</td><td>${(b.size/1024).toFixed(1)} KB</td><td>${fmtDateTime(b.modified_at)}</td></tr>`).join('')}</tbody></table></div>${!data.backups.length?'<div class="empty">Nenhum backup encontrado.</div>':''}</section>
-    <section class="panel"><div class="panel-body"><strong>Local dos arquivos:</strong><p class="code">Windows: %LOCALAPPDATA%\ONE_CRM\backups (ou a pasta de dados da versão anterior)</p><p class="muted">A restauração é feita pelo utilitário RESTAURAR_BACKUP.bat com o servidor fechado, porque substituir um banco em uso é uma forma bastante eficiente de fabricar corrupção.</p></div></section>`;
+    <section class="panel"><div class="table-wrap"><table class="data-table"><thead><tr><th>Arquivo</th><th>Tamanho</th><th>Modificado em</th><th>Ações</th></tr></thead><tbody>${data.backups.map(b=>`<tr><td class="code">${esc(b.name)}</td><td>${formatFileSize(b.size)}</td><td>${fmtDateTime(b.modified_at)}</td><td><button class="btn small" type="button" data-backup-download="${esc(b.name)}">${uiIcon('download',13)} Baixar</button></td></tr>`).join('')}</tbody></table></div>${!data.backups.length?'<div class="empty">Nenhum backup encontrado.</div>':''}</section>
+    <section class="panel"><div class="panel-body"><strong>Restauração protegida</strong><p class="muted">Baixe o arquivo necessário e use <span class="code">RESTAURAR_BACKUP.bat</span> com o servidor fechado. A restauração online continua bloqueada de propósito, porque trocar um SQLite em uso é uma excelente receita para corrupção.</p></div></section>`;
   $('#create-backup').addEventListener('click',async()=>{try{const r=await api('/api/backups',{method:'POST',body:{}});toast(r.message);renderBackups();}catch(error){toast(error.message,'error');}});
+  $$('[data-backup-download]').forEach(button=>button.addEventListener('click',()=>downloadProtectedFile(`/api/backups/${encodeURIComponent(button.dataset.backupDownload)}`,button.dataset.backupDownload).catch(error=>toast(error.message,'error'))));
 }
 
 async function renderIntegrations() {
@@ -2242,8 +2387,7 @@ async function renderIntegrations() {
     <section class="panel"><header class="panel-head"><h3>Configurações gerais</h3></header><div class="panel-body"><form id="integrations-form" class="form-grid">
       <label class="full">Power BI Embed URL<input name="powerbi_embed_url" value="${esc(i.powerbi_embed_url.value)}" ${readOnly} placeholder="https://app.powerbi.com/view?... "><small class="muted">URL incorporada pronta para uso em relatórios.</small></label>
       <label class="full">Webhook genérico<input name="generic_webhook_url" value="${esc(i.generic_webhook_url.value)}" ${readOnly} placeholder="https://seu-n8n/webhook/one-crm"><small class="muted">Recebe eventos sale.created, sale.updated e sale.workflow_updated.</small></label>
-      <label>Evolution API URL<input name="evolution_api_url" value="${esc(i.evolution_api_url.value)}" ${readOnly}></label>
-      <label>Evolution API Key<input name="evolution_api_key" type="password" value="${esc(i.evolution_api_key.value)}" ${readOnly}><small class="muted">${i.evolution_api_key.configured?'Já configurada.':''}</small></label>
+      <div class="integration-secret-box full"><div><strong>Evolution API</strong><p>Conector reservado para compatibilidade futura. O ONE CRM não executa ações por esta integração na versão atual.</p><small>Campos legados permanecem no banco, mas não são apresentados como integração operacional.</small></div>${badge('Não homologada','amber')}</div>
       <label class="full">Provedor do ONE Intelligence<select name="ai_provider" ${readOnly}>
         <option value="auto" ${savedProvider==='auto'?'selected':''}>Automático: Groq → OpenAI → Local</option>
         <option value="groq" ${savedProvider==='groq'?'selected':''}>GroqCloud</option>
@@ -2259,7 +2403,7 @@ async function renderIntegrations() {
     <section class="panel"><header class="panel-head"><h3>Estado dos conectores</h3></header><div class="panel-body grid-2">
       <div class="team-card"><h4>Power BI</h4><p>${esc(data.notes.powerbi)}</p>${i.powerbi_embed_url.configured?badge('Configurado','ok'):badge('Não configurado','aguard')}</div>
       <div class="team-card"><h4>Webhook / N8N</h4><p>${esc(data.notes.webhook)}</p>${i.generic_webhook_url.configured?badge('Configurado','ok'):badge('Não configurado','aguard')}</div>
-      <div class="team-card"><h4>Evolution API</h4><p>${esc(data.notes.evolution)}</p>${i.evolution_api_key.configured?badge('Credencial salva','ok'):badge('Pendente','aguard')}</div>
+      <div class="team-card"><h4>Evolution API</h4><p>${esc(data.notes.evolution)}</p>${badge('Não homologada','amber')}</div>
       <div class="team-card"><h4>ONE Intelligence</h4><p>${esc(data.notes.ai)}</p>${ai.ready?badge(`${ai.provider_label} · ${ai.model}`,'ok'):badge('Desativado','aguard')}</div>
       <div class="team-card"><h4>GroqCloud</h4><p>${esc(data.notes.groq)}</p>${groq.configured?badge(`Ativo · ${groq.model}`,'ok'):badge('Não configurado','aguard')}</div>
       <div class="team-card"><h4>OpenAI</h4><p>${esc(data.notes.openai)}</p>${openai.configured?badge(`Disponível · ${openai.model}`,'ok'):badge('Opcional','aguard')}</div>
@@ -2434,7 +2578,7 @@ const productivityTriggerLabels = {
   'form.submitted':'Formulário enviado',
 };
 const productivityPriorityLabels = {low:'Baixa',normal:'Normal',high:'Alta',urgent:'Urgente'};
-const productivityStatusLabels = {pending:'Pendente',done:'Concluída'};
+const productivityStatusLabels = {pending:'Pendente',in_progress:'Em andamento',done:'Concluída',cancelled:'Cancelada'};
 const dashboardWidgetCatalog = [
   {code:'summary',label:'Resumo geral',description:'Indicadores principais do perfil.'},
   {code:'tasks',label:'Tarefas',description:'Tarefas abertas, atrasadas e próximas do prazo.'},
@@ -2452,7 +2596,9 @@ const customFieldTypes = [
 function productivityTriggerLabel(value){ return productivityTriggerLabels[value] || value || '-'; }
 function productivityUsers(){
   const map=new Map();
-  (state.users||[]).filter(user=>user.active!==0).forEach(user=>map.set(String(user.id),user));
+  for(const collection of [state.productivityAssignees,state.productivityRecipients,state.productivityFormUsers,state.users]){
+    (collection||[]).filter(user=>user.active!==0).forEach(user=>map.set(String(user.id),user));
+  }
   if(state.user?.id&&!map.has(String(state.user.id))) map.set(String(state.user.id),{id:state.user.id,name:state.user.display_name||state.user.name,active:1});
   return [...map.values()];
 }
@@ -2472,87 +2618,154 @@ function slugBuilderKey(value){
   return String(value||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'').slice(0,50);
 }
 
+function taskStatusMarkup(task){
+  if(task.overdue&& !['done','cancelled'].includes(task.status)) return badge('Atrasada','red');
+  const color=task.status==='done'?'green':task.status==='cancelled'?'red':task.status==='in_progress'?'amber':'cyan';
+  return badge(productivityStatusLabels[task.status]||task.status,color);
+}
+function taskActionsMarkup(task,canManage){
+  const own=Number(task.assigned_user_id||0)===Number(state.user?.id||0);
+  if(!canManage&&!own)return '';
+  const actions=[];
+  if(task.status==='pending') actions.push(`<button class="btn small" type="button" data-task-status="${task.id}" data-next-status="in_progress">Iniciar</button>`);
+  if(['pending','in_progress'].includes(task.status)) actions.push(`<button class="btn small primary" type="button" data-task-status="${task.id}" data-next-status="done">Concluir</button>`);
+  if(['done','cancelled'].includes(task.status)) actions.push(`<button class="btn small ghost" type="button" data-task-status="${task.id}" data-next-status="pending">Reabrir</button>`);
+  if(canManage){
+    actions.push(`<button class="btn small ghost" type="button" data-task-edit="${task.id}">Editar</button>`);
+    if(!['done','cancelled'].includes(task.status)) actions.push(`<button class="btn small danger" type="button" data-task-status="${task.id}" data-next-status="cancelled">Cancelar</button>`);
+  }
+  return `<div class="task-row-actions">${actions.join('')}</div>`;
+}
+async function updateProductivityTaskStatus(id,status){
+  const label=productivityStatusLabels[status]||status;
+  try{await api(`/api/tasks/${id}`,{method:'PUT',body:{status}});toast(`Tarefa: ${label}.`);await renderWorkCenter();}catch(error){toast(error.message,'error');}
+}
+
 async function renderWorkCenter() {
   const requestedProfileId=Number(activeProfile()?.id||0);
   setPage('Central de produtividade','OPERAÇÃO');
   await ensureProductivityReferenceData();
   if(requestedProfileId!==Number(activeProfile()?.id||0)) return;
+  const canUseForms=has('forms.view')||has('forms.submit')||has('forms.manage');
   const [taskData,notificationData,automationData,formData,dashboardData,alertData] = await Promise.all([
-    api('/api/tasks').catch(()=>({tasks:[]})),
+    api('/api/tasks').catch(()=>({tasks:[],can_manage:false})),
     api('/api/notifications').catch(()=>({notifications:[],unread:0})),
     has('automations.manage') ? api('/api/automations').catch(()=>({rules:[]})) : Promise.resolve({rules:[]}),
-    has('forms.manage') ? api('/api/custom-forms').catch(()=>({forms:[]})) : Promise.resolve({forms:[]}),
-    has('reports.manage') ? api('/api/custom-dashboards').catch(()=>({dashboards:[]})) : Promise.resolve({dashboards:[]}),
+    canUseForms ? api('/api/custom-forms').catch(()=>({forms:[],can_manage:false,can_submit:false})) : Promise.resolve({forms:[],can_manage:false,can_submit:false}),
+    has('dashboard.view') ? api('/api/custom-dashboards').catch(()=>({dashboards:[]})) : Promise.resolve({dashboards:[]}),
     has('security.alerts') ? api('/api/security-alerts').catch(()=>({alerts:[]})) : Promise.resolve({alerts:[]}),
   ]);
   if(requestedProfileId!==Number(activeProfile()?.id||0)) return;
+  state.productivityTasks=taskData.tasks||[];
+  state.productivityAssignees=taskData.assignees||[];
+  state.productivityRecipients=automationData.recipients||[];
+  state.productivityFormUsers=formData.user_options||[];
   state.productivityAutomationRules=automationData.rules||[];
   state.productivityForms=formData.forms||[];
   state.productivityDashboards=dashboardData.dashboards||[];
-  const openTasks=(taskData.tasks||[]).filter(item=>item.status!=='done');
+  const canManageTasks=Boolean(taskData.can_manage||has('tasks.manage'));
+  const canManageForms=Boolean(formData.can_manage||has('forms.manage'));
+  const canSubmitForms=Boolean(formData.can_submit||has('forms.submit')||canManageForms);
+  const openTasks=(taskData.tasks||[]).filter(item=>!['done','cancelled'].includes(item.status));
   const overdueTasks=openTasks.filter(item=>item.overdue);
   const activeAutomations=(automationData.rules||[]).filter(item=>item.active);
   const openAlerts=(alertData.alerts||[]).filter(item=>!item.resolved_at);
   $('#content').innerHTML = `
     <section class="work-center-hero">
       <div><p class="eyebrow">PRODUTIVIDADE</p><h1>Trabalho, automações e alertas</h1><p>Organize tarefas, regras automáticas, formulários e visões do perfil <strong>${esc(activeProfile().name||'atual')}</strong>.</p></div>
-      <div class="work-center-actions">${has('tasks.manage')?'<button class="btn primary" id="new-productivity-task">＋ Nova tarefa</button>':''}${has('automations.manage')?'<button class="btn" id="hero-new-automation">＋ Automação</button>':''}</div>
+      <div class="work-center-actions">${canManageTasks?'<button class="btn primary" id="new-productivity-task">＋ Nova tarefa</button>':''}${has('automations.manage')?'<button class="btn" id="hero-new-automation">＋ Automação</button>':''}</div>
     </section>
     <section class="work-metrics" aria-label="Resumo de produtividade">
-      <article class="work-metric"><span class="work-metric-icon">✓</span><div><small>Tarefas abertas</small><strong>${openTasks.length}</strong><em>${overdueTasks.length?`${overdueTasks.length} atrasada(s)`:'Nenhuma atrasada'}</em></div></article>
-      <article class="work-metric"><span class="work-metric-icon">◉</span><div><small>Não lidas</small><strong>${notificationData.unread||0}</strong><em>Notificações</em></div></article>
-      <article class="work-metric"><span class="work-metric-icon">↻</span><div><small>Automações</small><strong>${activeAutomations.length}</strong><em>Regras ativas</em></div></article>
-      <article class="work-metric"><span class="work-metric-icon">!</span><div><small>Segurança</small><strong>${openAlerts.length}</strong><em>Alertas abertos</em></div></article>
+      <article class="work-metric"><span class="work-metric-icon">${uiIcon('checkSquare',18)}</span><div><small>Tarefas abertas</small><strong>${openTasks.length}</strong><em>${overdueTasks.length?`${overdueTasks.length} atrasada(s)`:'Nenhuma atrasada'}</em></div></article>
+      <article class="work-metric"><span class="work-metric-icon">${uiIcon('bell',18)}</span><div><small>Não lidas</small><strong>${notificationData.unread||0}</strong><em>Notificações</em></div></article>
+      <article class="work-metric"><span class="work-metric-icon">${uiIcon('automation',18)}</span><div><small>Automações</small><strong>${activeAutomations.length}</strong><em>Regras ativas</em></div></article>
+      <article class="work-metric"><span class="work-metric-icon">${uiIcon('alert',18)}</span><div><small>Segurança</small><strong>${openAlerts.length}</strong><em>Alertas abertos</em></div></article>
     </section>
     <div class="work-grid work-grid-primary">
       <section class="panel work-panel work-panel-wide">
-        <header class="panel-head"><div><h3>Tarefas</h3><small class="muted">Prazos e responsáveis do perfil atual</small></div>${has('tasks.manage')?'<button class="btn small" id="panel-new-task">＋ Nova tarefa</button>':''}</header>
-        <div class="table-wrap"><table class="data-table work-table"><thead><tr><th>Tarefa</th><th>Responsável</th><th>Prazo</th><th>Status</th></tr></thead><tbody>${(taskData.tasks||[]).map(t=>`<tr><td><div class="cell-main">${esc(t.title)}</div>${t.description?`<div class="cell-sub">${esc(t.description)}</div>`:''}</td><td>${esc(t.assigned_name||'-')}</td><td>${fmtDateTime(t.due_at)}</td><td>${badge(t.overdue?'Atrasada':(productivityStatusLabels[t.status]||t.status),t.overdue?'red':t.status==='done'?'green':'cyan')}</td></tr>`).join('')||'<tr><td colspan="4"><div class="empty compact-empty">Nenhuma tarefa cadastrada.</div></td></tr>'}</tbody></table></div>
+        <header class="panel-head"><div><h3>Tarefas</h3><small class="muted">${canManageTasks?'Todas as tarefas do perfil atual':'Somente as tarefas designadas a você'}</small></div>${canManageTasks?'<button class="btn small" id="panel-new-task">＋ Nova tarefa</button>':''}</header>
+        <div class="table-wrap"><table class="data-table work-table"><thead><tr><th>Tarefa</th><th>Responsável</th><th>Prazo</th><th>Status</th><th>Ações</th></tr></thead><tbody>${(taskData.tasks||[]).map(t=>`<tr class="${t.status==='done'?'task-completed':''}"><td><div class="cell-main">${esc(t.title)}</div>${t.description?`<div class="cell-sub">${esc(t.description)}</div>`:''}<div class="cell-sub">Criada por ${esc(t.created_by_name||'Sistema')} · ${esc(productivityPriorityLabels[t.priority]||t.priority)}</div></td><td>${esc(t.assigned_name||'-')}</td><td>${fmtDateTime(t.due_at)}</td><td>${taskStatusMarkup(t)}</td><td>${taskActionsMarkup(t,canManageTasks)}</td></tr>`).join('')||'<tr><td colspan="5"><div class="empty compact-empty">Nenhuma tarefa cadastrada.</div></td></tr>'}</tbody></table></div>
       </section>
       <section class="panel work-panel">
-        <header class="panel-head"><div><h3>Notificações</h3><small class="muted">Últimos avisos direcionados a você</small></div>${notificationData.unread?badge(`${notificationData.unread} nova(s)`,'cyan'):badge('Em dia','green')}</header>
-        <div class="stack-list work-list">${(notificationData.notifications||[]).slice(0,12).map(n=>`<article class="list-card work-list-card ${n.read_at?'':'unread'}"><div><strong>${esc(n.title)}</strong><p>${esc(n.message)}</p><small>${fmtDateTime(n.created_at)} · ${n.read_at?'Lida':'Não lida'}</small></div>${n.read_at?'':`<button class="btn small ghost" type="button" data-notification-read="${n.id}">Marcar como lida</button>`}</article>`).join('')||'<div class="empty compact-empty">Nenhuma notificação.</div>'}</div>
+        <header class="panel-head"><div><h3>Notificações</h3><small class="muted">Últimos avisos direcionados a você</small></div><div class="panel-head-actions">${notificationData.unread?badge(`${notificationData.unread} nova(s)`,'cyan'):badge('Em dia','green')}${notificationData.unread?'<button class="btn small ghost" id="read-all-notifications">Ler todas</button>':''}</div></header>
+        <div class="stack-list work-list">${(notificationData.notifications||[]).slice(0,20).map(n=>`<article class="list-card work-list-card ${n.read_at?'':'unread'}"><div><strong>${esc(n.title)}</strong><p>${esc(n.message)}</p><small>${fmtDateTime(n.created_at)} · ${n.read_at?'Lida':'Não lida'}</small></div><div class="list-card-actions">${n.link?`<button class="btn small ghost" type="button" data-notification-open="${n.id}" data-notification-link="${esc(n.link)}">Abrir</button>`:''}${n.read_at?'':`<button class="btn small ghost" type="button" data-notification-read="${n.id}">Marcar como lida</button>`}</div></article>`).join('')||'<div class="empty compact-empty">Nenhuma notificação.</div>'}</div>
       </section>
     </div>
     <div class="work-grid">
       <section class="panel work-panel">
         <header class="panel-head"><div><h3>Automações</h3><small class="muted">Regras que executam tarefas sozinhas</small></div>${has('automations.manage')?'<button class="btn small" id="new-automation">＋ Nova regra</button>':''}</header>
-        <div class="stack-list work-list">${(automationData.rules||[]).map(r=>`<article class="list-card work-list-card"><div><div class="work-card-title"><strong>${esc(r.name)}</strong>${r.active?badge('Ativa','green'):badge('Inativa','red')}</div><p>${esc(productivityTriggerLabel(r.trigger_event))} · ${(r.actions||[]).length} ação(ões)</p><small>${r.last_run_at?'Última execução '+fmtDateTime(r.last_run_at):'Ainda não executada'}</small></div>${has('automations.manage')?`<button class="btn small ghost" type="button" data-automation-edit="${r.id}">Editar</button>`:''}</article>`).join('')||'<div class="empty compact-empty">Nenhuma automação configurada.</div>'}</div>
+        <div class="stack-list work-list">${(automationData.rules||[]).map(r=>`<article class="list-card work-list-card"><div><div class="work-card-title"><strong>${esc(r.name)}</strong>${r.active?badge('Ativa','green'):badge('Pausada','red')}</div><p>${esc(productivityTriggerLabel(r.trigger_event))} · ${(r.actions||[]).length} ação(ões)</p><small>${r.last_run_at?'Última execução '+fmtDateTime(r.last_run_at):'Ainda não executada'}</small></div>${has('automations.manage')?`<button class="btn small ghost" type="button" data-automation-edit="${r.id}">Editar</button>`:''}</article>`).join('')||'<div class="empty compact-empty">Nenhuma automação configurada.</div>'}</div>
       </section>
-      <section class="panel work-panel">
-        <header class="panel-head"><div><h3>Formulários personalizados</h3><small class="muted">Campos criados sem editar código</small></div>${has('forms.manage')?'<button class="btn small" id="new-custom-form">＋ Novo formulário</button>':''}</header>
-        <div class="stack-list work-list">${(formData.forms||[]).map(f=>`<article class="list-card work-list-card"><div><div class="work-card-title"><strong>${esc(f.name)}</strong>${f.active?badge('Ativo','green'):badge('Inativo','red')}</div><p>${esc(f.description||'Sem descrição')}</p><small>${(f.schema||[]).length} campo(s)</small></div>${has('forms.manage')?`<button class="btn small ghost" type="button" data-custom-form-edit="${f.id}">Editar</button>`:''}</article>`).join('')||'<div class="empty compact-empty">Nenhum formulário personalizado.</div>'}</div>
-      </section>
+      ${canUseForms?`<section class="panel work-panel">
+        <header class="panel-head"><div><h3>Formulários personalizados</h3><small class="muted">Colete dados sem editar código</small></div>${canManageForms?'<button class="btn small" id="new-custom-form">＋ Novo formulário</button>':''}</header>
+        <div class="stack-list work-list">${(formData.forms||[]).map(f=>`<article class="list-card work-list-card"><div><div class="work-card-title"><strong>${esc(f.name)}</strong>${f.active?badge('Ativo','green'):badge('Inativo','red')}</div><p>${esc(f.description||'Sem descrição')}</p><small>${(f.schema||[]).length} campo(s)${canManageForms?` · ${Number(f.entries_count||0)} envio(s)`:''}</small></div><div class="list-card-actions">${canSubmitForms&&f.active?`<button class="btn small primary" type="button" data-custom-form-fill="${f.id}">Preencher</button>`:''}${canManageForms?`<button class="btn small ghost" type="button" data-custom-form-entries="${f.id}">Envios</button><button class="btn small ghost" type="button" data-custom-form-edit="${f.id}">Editar</button>`:''}</div></article>`).join('')||'<div class="empty compact-empty">Nenhum formulário personalizado.</div>'}</div>
+      </section>`:''}
       <section class="panel work-panel">
         <header class="panel-head"><div><h3>Dashboards personalizados</h3><small class="muted">Escolha os indicadores que cada visão mostra</small></div>${has('reports.manage')?'<button class="btn small" id="new-dashboard-view">＋ Nova visão</button>':''}</header>
         <div class="stack-list work-list">${(dashboardData.dashboards||[]).map(d=>`<article class="list-card work-list-card"><div><div class="work-card-title"><strong>${esc(d.name)}</strong>${d.is_default?badge('Padrão','cyan'):''}</div><p>${d.owner_user_id?'Visão pessoal':'Compartilhada com o perfil'}</p><small>${(d.config?.widgets||[]).length} widget(s)</small></div>${has('reports.manage')?`<button class="btn small ghost" type="button" data-dashboard-edit="${d.id}">Editar</button>`:''}</article>`).join('')||'<div class="empty compact-empty">Nenhuma visão personalizada.</div>'}</div>
       </section>
-      <section class="panel work-panel">
+      ${has('security.alerts')?`<section class="panel work-panel">
         <header class="panel-head"><div><h3>Alertas de segurança</h3><small class="muted">Eventos que merecem revisão administrativa</small></div></header>
-        <div class="stack-list work-list">${(alertData.alerts||[]).slice(0,12).map(a=>`<article class="list-card work-list-card"><div><div class="work-card-title"><strong>${esc(a.title)}</strong>${badge(esc(a.severity||'info'),a.severity==='critical'||a.severity==='high'?'red':a.severity==='medium'?'amber':'cyan')}</div><p>${esc(a.alert_type)}</p><small>${fmtDateTime(a.created_at)}</small></div></article>`).join('')||'<div class="empty compact-empty">Nenhum alerta de segurança.</div>'}</div>
-      </section>
+        <div class="stack-list work-list">${(alertData.alerts||[]).slice(0,20).map(a=>`<article class="list-card work-list-card ${a.resolved_at?'is-resolved':''}"><div><div class="work-card-title"><strong>${esc(a.title)}</strong>${a.resolved_at?badge('Resolvido','green'):badge(esc(a.severity||'info'),a.severity==='critical'||a.severity==='high'?'red':a.severity==='medium'?'amber':'cyan')}</div><p>${esc(a.alert_type)}</p><small>${fmtDateTime(a.created_at)}${a.resolved_at?` · resolvido ${fmtDateTime(a.resolved_at)}`:''}</small></div><button class="btn small ghost" type="button" data-security-alert="${a.id}" data-alert-resolved="${a.resolved_at?'1':'0'}">${a.resolved_at?'Reabrir':'Resolver'}</button></article>`).join('')||'<div class="empty compact-empty">Nenhum alerta de segurança.</div>'}</div>
+      </section>`:''}
     </div>`;
   const newTask=()=>openProductivityTaskForm();
-  $('#new-productivity-task')?.addEventListener('click',newTask);
-  $('#panel-new-task')?.addEventListener('click',newTask);
-  $('#new-automation')?.addEventListener('click',()=>openAutomationForm());
-  $('#hero-new-automation')?.addEventListener('click',()=>openAutomationForm());
-  $('#new-custom-form')?.addEventListener('click',()=>openCustomFormBuilder());
-  $('#new-dashboard-view')?.addEventListener('click',()=>openDashboardViewForm());
+  $('#new-productivity-task')?.addEventListener('click',newTask);$('#panel-new-task')?.addEventListener('click',newTask);
+  $('#new-automation')?.addEventListener('click',()=>openAutomationForm());$('#hero-new-automation')?.addEventListener('click',()=>openAutomationForm());
+  $('#new-custom-form')?.addEventListener('click',()=>openCustomFormBuilder());$('#new-dashboard-view')?.addEventListener('click',()=>openDashboardViewForm());
+  $$('[data-task-status]').forEach(button=>button.addEventListener('click',()=>updateProductivityTaskStatus(Number(button.dataset.taskStatus),button.dataset.nextStatus)));
+  $$('[data-task-edit]').forEach(button=>button.addEventListener('click',()=>openProductivityTaskForm(Number(button.dataset.taskEdit))));
   $$('[data-notification-read]').forEach(button=>button.addEventListener('click',async()=>{try{await api(`/api/notifications/${button.dataset.notificationRead}`,{method:'PUT',body:{}});await renderWorkCenter();}catch(error){toast(error.message,'error');}}));
+  $('#read-all-notifications')?.addEventListener('click',async()=>{try{await api('/api/notifications/read-all',{method:'PUT',body:{}});await renderWorkCenter();}catch(error){toast(error.message,'error');}});
+  $$('[data-notification-open]').forEach(button=>button.addEventListener('click',async()=>{try{if(!button.closest('.work-list-card')?.classList.contains('read'))await api(`/api/notifications/${button.dataset.notificationOpen}`,{method:'PUT',body:{}});}catch(_error){}const link=String(button.dataset.notificationLink||'');if(link.startsWith('#/'))location.hash=link;}));
   $$('[data-automation-edit]').forEach(button=>button.addEventListener('click',()=>openAutomationForm(Number(button.dataset.automationEdit))));
   $$('[data-custom-form-edit]').forEach(button=>button.addEventListener('click',()=>openCustomFormBuilder(Number(button.dataset.customFormEdit))));
+  $$('[data-custom-form-fill]').forEach(button=>button.addEventListener('click',()=>openCustomFormEntryForm(Number(button.dataset.customFormFill))));
+  $$('[data-custom-form-entries]').forEach(button=>button.addEventListener('click',()=>openCustomFormEntries(Number(button.dataset.customFormEntries))));
   $$('[data-dashboard-edit]').forEach(button=>button.addEventListener('click',()=>openDashboardViewForm(Number(button.dataset.dashboardEdit))));
+  $$('[data-security-alert]').forEach(button=>button.addEventListener('click',async()=>{try{await api(`/api/security-alerts/${button.dataset.securityAlert}`,{method:'PUT',body:{resolved:button.dataset.alertResolved!=='1'}});await renderWorkCenter();}catch(error){toast(error.message,'error');}}));
 }
 
-async function openProductivityTaskForm(){
+async function openProductivityTaskForm(id=null){
   await ensureProductivityReferenceData();
-  modal('Nova tarefa',`<form id="productivity-task-form" class="builder-form">
-    <div class="builder-intro"><span class="builder-step">1</span><div><strong>O que precisa ser feito?</strong><small>Crie uma tarefa clara, escolha o responsável e defina o prazo.</small></div></div>
-    <div class="builder-grid"><label class="builder-span-2">Título<input name="title" required minlength="3" placeholder="Ex.: Confirmar instalação com o cliente"></label><label class="builder-span-2">Descrição<textarea name="description" rows="3" placeholder="Inclua informações úteis para quem receber a tarefa."></textarea></label><label>Responsável<select name="assigned_user_id">${productivityUserOptions(state.user?.id)}</select></label><label>Prioridade<select name="priority"><option value="low">Baixa</option><option value="normal" selected>Normal</option><option value="high">Alta</option><option value="urgent">Urgente</option></select></label><label class="builder-span-2">Prazo<input name="due_at" type="datetime-local"></label></div>
-    <div class="builder-footer"><button class="btn ghost" type="button" data-close-modal>Cancelar</button><button class="btn primary" type="submit">Criar tarefa</button></div>
+  const task=id?(state.productivityTasks||[]).find(item=>Number(item.id)===Number(id)):null;
+  if(id&&!task){toast('Tarefa não encontrada.','error');return;}
+  const canManage=has('tasks.manage');
+  if(id&&!canManage){return updateProductivityTaskStatus(id,task.status==='done'?'pending':'done');}
+  modal(task?'Editar tarefa':'Nova tarefa',`<form id="productivity-task-form" class="builder-form">
+    <div class="builder-intro"><span class="builder-step">1</span><div><strong>${task?'Ajuste a tarefa':'O que precisa ser feito?'}</strong><small>Defina responsável, prioridade e prazo. O responsável poderá iniciar, concluir e reabrir a própria tarefa.</small></div></div>
+    <div class="builder-grid"><label class="builder-span-2">Título<input name="title" required minlength="3" value="${esc(task?.title||'')}" placeholder="Ex.: Confirmar instalação com o cliente"></label><label class="builder-span-2">Descrição<textarea name="description" rows="3" placeholder="Inclua informações úteis para quem receber a tarefa.">${esc(task?.description||'')}</textarea></label><label>Responsável<select name="assigned_user_id">${productivityUserOptions(task?.assigned_user_id||state.user?.id)}</select></label><label>Prioridade<select name="priority">${Object.entries(productivityPriorityLabels).map(([value,label])=>`<option value="${value}" ${(task?.priority||'normal')===value?'selected':''}>${label}</option>`).join('')}</select></label><label>Prazo<input name="due_at" type="datetime-local" value="${esc(task?.due_at||'')}"></label>${task?`<label>Status<select name="status">${Object.entries(productivityStatusLabels).map(([value,label])=>`<option value="${value}" ${task.status===value?'selected':''}>${label}</option>`).join('')}</select></label>`:''}</div>
+    <div class="builder-footer"><button class="btn ghost" type="button" data-close-modal>Cancelar</button><button class="btn primary" type="submit">${task?'Salvar alterações':'Criar tarefa'}</button></div>
   </form>`,{wide:true});
-  $('#productivity-task-form').addEventListener('submit',async e=>{e.preventDefault();const data=formObject(e.currentTarget);data.assigned_user_id=Number(data.assigned_user_id||state.user?.id||0);try{await api('/api/tasks',{method:'POST',body:data});closeModal();toast('Tarefa criada.');renderWorkCenter();}catch(error){toast(error.message,'error');}});
+  $('#productivity-task-form').addEventListener('submit',async event=>{event.preventDefault();const data=formObject(event.currentTarget);data.assigned_user_id=Number(data.assigned_user_id||state.user?.id||0);try{await api(task?`/api/tasks/${task.id}`:'/api/tasks',{method:task?'PUT':'POST',body:data});closeModal();toast(task?'Tarefa atualizada.':'Tarefa criada.');renderWorkCenter();}catch(error){toast(error.message,'error');}});
+}
+
+function renderCustomFormField(field){
+  const key=esc(field.key),label=esc(field.label||field.key),required=field.required?'required':'';
+  const placeholder=esc(field.placeholder||'');
+  if(field.type==='textarea')return `<label class="full">${label}<textarea name="${key}" ${required} placeholder="${placeholder}"></textarea></label>`;
+  if(field.type==='select')return `<label>${label}<select name="${key}" ${required}><option value="">Selecione...</option>${(field.options||[]).map(option=>`<option value="${esc(option)}">${esc(option)}</option>`).join('')}</select></label>`;
+  if(field.type==='checkbox')return `<label class="switch-row"><span>${label}</span><input type="checkbox" name="${key}"></label>`;
+  if(field.type==='user')return `<label>${label}<select name="${key}" ${required}>${productivityUserOptions('')}</select></label>`;
+  if(field.type==='file')return `<label class="full">${label}<input type="file" data-form-file="${key}" ${required} accept=".pdf,.png,.jpg,.jpeg,.webp,.txt,.csv,.xlsx,.docx"><small class="muted">Até 5 MB.</small></label>`;
+  const types={number:'number',currency:'number',date:'date',datetime:'datetime-local',email:'email',phone:'tel'};
+  const type=types[field.type]||'text';const extra=field.type==='currency'?'step="0.01" min="0"':'';
+  return `<label>${label}<input type="${type}" name="${key}" ${required} ${extra} placeholder="${placeholder}"></label>`;
+}
+async function fileToBase64(file){return await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result||'').split(',')[1]||'');reader.onerror=()=>reject(new Error('Não foi possível ler o arquivo.'));reader.readAsDataURL(file);});}
+async function uploadAttachmentFile(file,entityType='general',entityId=0){
+  if(file.size>5*1024*1024)throw new Error(`${file.name}: limite de 5 MB excedido.`);
+  const content_base64=await fileToBase64(file);
+  return api('/api/attachments',{method:'POST',body:{filename:file.name,content_base64,entity_type:entityType,entity_id:Number(entityId||0)}});
+}
+async function openCustomFormEntryForm(id){
+  await ensureProductivityReferenceData();const formData=(state.productivityForms||[]).find(item=>Number(item.id)===Number(id));if(!formData){toast('Formulário não encontrado.','error');return;}
+  modal(`Preencher · ${formData.name}`,`<form id="custom-form-entry" class="form-grid">${formData.description?`<div class="full form-description">${esc(formData.description)}</div>`:''}${(formData.schema||[]).map(renderCustomFormField).join('')}<div class="full form-actions"><button class="btn ghost" type="button" data-close-modal>Cancelar</button><button class="btn primary" type="submit">Enviar formulário</button></div></form>`,{wide:true});
+  const form=$('#custom-form-entry');
+  form.addEventListener('submit',async event=>{event.preventDefault();const values=formObject(form);for(const input of $$('[data-form-file]',form)){const file=input.files?.[0];if(file)values[input.dataset.formFile]=file.name;else delete values[input.dataset.formFile];}try{const result=await api(`/api/custom-forms/${id}/entries`,{method:'POST',body:{data:values}});for(const input of $$('[data-form-file]',form)){if(input.files?.[0])await uploadAttachmentFile(input.files[0],'custom_form_entry',result.id);}closeModal();toast('Formulário enviado.');renderWorkCenter();}catch(error){toast(error.message,'error');}});
+}
+async function openCustomFormEntries(id){
+  try{const data=await api(`/api/custom-forms/${id}/entries`);const schema=data.form.schema||[];modal(`Envios · ${data.form.name}`,`<div class="form-entry-list">${(data.entries||[]).map(entry=>`<article class="builder-card form-entry-card"><header><div><strong>#${entry.id} · ${esc(entry.created_by_name||'Usuário')}</strong><small>${fmtDateTime(entry.created_at)}</small></div></header><div class="entry-values">${schema.map(field=>`<div><span>${esc(field.label||field.key)}</span><strong>${esc(entry.data?.[field.key]===true?'Sim':entry.data?.[field.key]===false?'Não':entry.data?.[field.key]??'-')}</strong></div>`).join('')}</div><div class="entry-attachments" data-entry-attachments="${entry.id}"></div></article>`).join('')||'<div class="empty">Nenhum envio registrado.</div>'}</div>`,{wide:true});for(const holder of $$('[data-entry-attachments]')){try{const attachments=await api(`/api/attachments?${qs({entity_type:'custom_form_entry',entity_id:holder.dataset.entryAttachments})}`);holder.innerHTML=(attachments.attachments||[]).map(file=>`<button class="btn small ghost" type="button" data-attachment-download="${file.id}" data-attachment-name="${esc(file.original_name)}">${uiIcon('file',13)} ${esc(file.original_name)}</button>`).join('');$$('[data-attachment-download]',holder).forEach(button=>button.addEventListener('click',()=>downloadProtectedFile(`/api/attachments/${button.dataset.attachmentDownload}`,button.dataset.attachmentName).catch(error=>toast(error.message,'error'))));}catch(_error){}}}catch(error){toast(error.message,'error');}
 }
 
 function automationConditionEditor(trigger,conditions={}){
@@ -2658,7 +2871,8 @@ async function openCustomFormBuilder(id=null){
 async function openDashboardViewForm(id=null){
   const view=id?(state.productivityDashboards||[]).find(item=>Number(item.id)===Number(id)):null;
   const selected=new Set(view?.config?.widgets||['summary','tasks','notifications']);
-  modal(view?'Editar visão de dashboard':'Nova visão de dashboard',`<form id="dashboard-view-form" class="builder-form"><div class="builder-intro"><span class="builder-step">1</span><div><strong>Nome e finalidade</strong><small>Crie uma visão simples e escolha abaixo quais blocos devem aparecer.</small></div></div><div class="builder-grid"><label class="builder-span-2">Nome da visão<input name="name" required minlength="2" value="${esc(view?.name||'')}" placeholder="Ex.: Gestão diária"></label></div><section class="builder-section"><header><span class="builder-step">2</span><div><strong>Widgets</strong><small>Marque somente as informações relevantes para esta visão.</small></div></header><div class="widget-picker">${dashboardWidgetCatalog.map(widget=>`<label class="widget-choice"><input type="checkbox" name="dashboard_widget" value="${widget.code}" ${selected.has(widget.code)?'checked':''}><span><strong>${esc(widget.label)}</strong><small>${esc(widget.description)}</small></span></label>`).join('')}</div></section><div class="builder-grid"><label class="builder-switch"><span><strong>Compartilhar com o perfil</strong><small>Todos com acesso ao perfil poderão usar esta visão.</small></span><input name="shared" type="checkbox" ${view&&!view.owner_user_id?'checked':''}></label><label class="builder-switch"><span><strong>Usar como padrão</strong><small>Prioriza esta visão na lista de dashboards.</small></span><input name="is_default" type="checkbox" ${view?.is_default?'checked':''}></label></div><div class="builder-footer"><button class="btn ghost" type="button" data-close-modal>Cancelar</button><button class="btn primary" type="submit">${view?'Salvar alterações':'Salvar visão'}</button></div></form>`,{wide:true});
+  modal(view?'Editar visão de dashboard':'Nova visão de dashboard',`<form id="dashboard-view-form" class="builder-form"><div class="builder-intro"><span class="builder-step">1</span><div><strong>Nome e finalidade</strong><small>Crie uma visão simples e escolha abaixo quais blocos devem aparecer.</small></div></div><div class="builder-grid"><label class="builder-span-2">Nome da visão<input name="name" required minlength="2" value="${esc(view?.name||'')}" placeholder="Ex.: Gestão diária"></label></div><section class="builder-section"><header><span class="builder-step">2</span><div><strong>Widgets</strong><small>Marque somente as informações relevantes para esta visão.</small></div></header><div class="widget-picker">${dashboardWidgetCatalog.map(widget=>`<label class="widget-choice"><input type="checkbox" name="dashboard_widget" value="${widget.code}" ${selected.has(widget.code)?'checked':''}><span><strong>${esc(widget.label)}</strong><small>${esc(widget.description)}</small></span></label>`).join('')}</div></section><div class="builder-grid"><label class="builder-switch"><span><strong>Compartilhar com o perfil</strong><small>Todos com acesso ao perfil poderão usar esta visão.</small></span><input name="shared" type="checkbox" ${view&&!view.owner_user_id?'checked':''}></label><label class="builder-switch"><span><strong>Usar como padrão</strong><small>Prioriza esta visão na lista de dashboards.</small></span><input name="is_default" type="checkbox" ${view?.is_default?'checked':''}></label></div><div class="builder-footer">${view?'<button class="btn danger" type="button" id="delete-dashboard-view">Excluir visão</button>':''}<span class="builder-footer-spacer"></span><button class="btn ghost" type="button" data-close-modal>Cancelar</button><button class="btn primary" type="submit">${view?'Salvar alterações':'Salvar visão'}</button></div></form>`,{wide:true});
   const form=$('#dashboard-view-form');
+  $('#delete-dashboard-view')?.addEventListener('click',async()=>{if(!confirm(`Excluir a visão "${view?.name||''}"?`))return;try{await api(`/api/custom-dashboards/${view.id}`,{method:'DELETE'});localStorage.removeItem(dashboardViewStorageKey());closeModal();toast('Visão excluída.');if(parseRoute().route==='dashboard')await renderDashboard();else await renderWorkCenter();}catch(error){toast(error.message,'error');}});
   form.addEventListener('submit',async event=>{event.preventDefault();const data=formObject(form);const widgets=$$('input[name="dashboard_widget"]:checked',form).map(input=>input.value);if(!widgets.length){toast('Escolha pelo menos um widget.','error');return;}const payload={id:view?.id,name:String(data.name||'').trim(),config:{widgets},shared:Boolean(data.shared),is_default:Boolean(data.is_default)};try{const result=await api('/api/custom-dashboards',{method:'POST',body:payload});closeModal();toast(view?'Visão atualizada.':'Visão salva.');if(parseRoute().route==='dashboard'){localStorage.setItem(dashboardViewStorageKey(),String(result.id||view?.id||'system'));await renderDashboard();}else{renderWorkCenter();}}catch(error){toast(error.message,'error');}});
 }
