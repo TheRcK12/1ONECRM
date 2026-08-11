@@ -154,18 +154,15 @@ const moduleEnabled = route => {
 };
 const presetLabel = (key, fallback='') => activePreset().navigation_labels?.[key] || fallback || key;
 const currentTheme = () => document.documentElement.dataset.theme === 'light' ? 'light' : 'dark';
-const accentPresets = {
-  emerald:{label:'Verde neon',hex:'#55e69d'},
-  cyan:{label:'Ciano',hex:'#48dfe5'},
-  blue:{label:'Azul elétrico',hex:'#62a8ff'},
-  violet:{label:'Roxo',hex:'#a983ff'},
-  rose:{label:'Rosa',hex:'#ff72ad'},
-  amber:{label:'Âmbar',hex:'#f0b95d'},
+const DEFAULT_ACCENT = '#55e69d';
+const LEGACY_ACCENTS = {
+  emerald:'#55e69d',cyan:'#48dfe5',blue:'#62a8ff',violet:'#a983ff',rose:'#ff72ad',amber:'#f0b95d',
 };
 const DARK_BACKGROUND = 'obsidian';
 const normalizeAccent = value => {
   const raw=String(value||'').trim().toLowerCase();
-  return accentPresets[raw] || /^#[0-9a-f]{6}$/.test(raw) ? raw : 'emerald';
+  if(/^#[0-9a-f]{6}$/.test(raw)) return raw;
+  return LEGACY_ACCENTS[raw] || DEFAULT_ACCENT;
 };
 const normalizeBackground = _value => DARK_BACKGROUND;
 function hexToRgb(hex){
@@ -198,7 +195,7 @@ function hsvToRgb(h,s,v){
 }
 function accentHex(accent=currentAccent()){
   const normalized=normalizeAccent(accent);
-  return String(accentPresets[normalized]?.hex || normalized || '#55e69d').toLowerCase();
+  return String(normalized || DEFAULT_ACCENT).toLowerCase();
 }
 function mixHex(hex, target, amount){
   const a=hexToRgb(hex),b=hexToRgb(target);const p=Math.max(0,Math.min(1,amount));
@@ -208,21 +205,17 @@ function mixHex(hex, target, amount){
 function applyAccent(accent,{saveLocal=true}={}){
   const normalized=normalizeAccent(accent);
   const root=document.documentElement;
-  root.dataset.accent=accentPresets[normalized]?normalized:'custom';
-  if(accentPresets[normalized]){
-    ['--accent','--accent-strong','--accent-soft','--accent-glow','--accent-rgb','--accent-contrast','--cyan','--cyan-dark'].forEach(name=>root.style.removeProperty(name));
-  }else{
-    const rgb=hexToRgb(normalized);
-    const luminance=(0.2126*rgb.r+0.7152*rgb.g+0.0722*rgb.b)/255;
-    root.style.setProperty('--accent',normalized);
-    root.style.setProperty('--accent-strong',mixHex(normalized,'#000000',.22));
-    root.style.setProperty('--accent-soft',`rgba(${rgb.r},${rgb.g},${rgb.b},.12)`);
-    root.style.setProperty('--accent-glow',`rgba(${rgb.r},${rgb.g},${rgb.b},.24)`);
-    root.style.setProperty('--accent-rgb',`${rgb.r},${rgb.g},${rgb.b}`);
-    root.style.setProperty('--accent-contrast',luminance>.62?'#07100c':'#f7fbff');
-    root.style.setProperty('--cyan',normalized);
-    root.style.setProperty('--cyan-dark',mixHex(normalized,'#000000',.22));
-  }
+  root.dataset.accent='custom';
+  const rgb=hexToRgb(normalized);
+  const luminance=(0.2126*rgb.r+0.7152*rgb.g+0.0722*rgb.b)/255;
+  root.style.setProperty('--accent',normalized);
+  root.style.setProperty('--accent-strong',mixHex(normalized,'#000000',.22));
+  root.style.setProperty('--accent-soft',`rgba(${rgb.r},${rgb.g},${rgb.b},.12)`);
+  root.style.setProperty('--accent-glow',`rgba(${rgb.r},${rgb.g},${rgb.b},.24)`);
+  root.style.setProperty('--accent-rgb',`${rgb.r},${rgb.g},${rgb.b}`);
+  root.style.setProperty('--accent-contrast',luminance>.62?'#07100c':'#f7fbff');
+  root.style.setProperty('--cyan',normalized);
+  root.style.setProperty('--cyan-dark',mixHex(normalized,'#000000',.22));
   if(saveLocal)localStorage.setItem('one-crm-accent',normalized);
 }
 function applyBackground(background,{saveLocal=true}={}){
@@ -231,11 +224,11 @@ function applyBackground(background,{saveLocal=true}={}){
   if(saveLocal)localStorage.setItem('one-crm-background',normalized);
   updateThemeUi();
 }
-function currentAccent(){return normalizeAccent(state.user?.accent_preference || localStorage.getItem('one-crm-accent') || 'emerald');}
+function currentAccent(){return normalizeAccent(state.user?.accent_preference || localStorage.getItem('one-crm-accent') || DEFAULT_ACCENT);}
 function currentBackground(){return DARK_BACKGROUND;}
 function applyUserAppearance(user=state.user){
   applyTheme(user?.theme_preference || localStorage.getItem('one-crm-theme') || 'dark');
-  applyAccent(user?.accent_preference || localStorage.getItem('one-crm-accent') || 'emerald');
+  applyAccent(user?.accent_preference || localStorage.getItem('one-crm-accent') || DEFAULT_ACCENT);
   applyBackground(DARK_BACKGROUND);
 }
 async function saveAppearance(patch){
@@ -2415,7 +2408,6 @@ function openAccentColorStudio(){
   const initialRgb=hexToRgb(initialHex);
   const initialHsv=rgbToHsv(initialRgb.r,initialRgb.g,initialRgb.b);
   let hue=initialHsv.h,saturation=initialHsv.s,value=initialHsv.v,selectedHex=initialHex;
-  const quickColors=['#55e69d','#48dfe5','#62a8ff','#a983ff','#ff72ad','#f0b95d','#ff6b6b','#ffffff'];
   modal('Personalizar cor de destaque',`
     <div class="color-studio">
       <section class="color-studio-hero">
@@ -2435,7 +2427,6 @@ function openAccentColorStudio(){
         <div class="color-studio-values">
           <label class="color-hex-field"><span>HEX</span><div><b>#</b><input id="color-hex-input" inputmode="text" autocomplete="off" spellcheck="false" maxlength="6" value="${esc(initialHex.slice(1).toUpperCase())}"></div><small>Digite uma cor ou use o painel ao lado.</small></label>
           <div class="color-rgb-values"><div><span>R</span><strong id="color-r-value">${initialRgb.r}</strong></div><div><span>G</span><strong id="color-g-value">${initialRgb.g}</strong></div><div><span>B</span><strong id="color-b-value">${initialRgb.b}</strong></div></div>
-          <div class="color-quick-group"><span>Cores rápidas</span><div class="color-quick-list">${quickColors.map(color=>`<button type="button" data-color-quick="${color}" style="--quick-color:${color}" aria-label="Usar ${color}"></button>`).join('')}</div></div>
           <div class="color-studio-note"><span class="color-note-dot"></span><p>O sistema gera automaticamente a tonalidade escura e o brilho neon a partir da cor escolhida.</p></div>
         </div>
       </div>
@@ -2475,7 +2466,6 @@ function openAccentColorStudio(){
   hueTrack.addEventListener('keydown',event=>{const step=event.shiftKey?15:2;if(event.key==='ArrowLeft')hue=(hue-step+360)%360;else if(event.key==='ArrowRight')hue=(hue+step)%360;else return;event.preventDefault();updateUi();});
   hexInput.addEventListener('input',event=>{event.currentTarget.value=event.currentTarget.value.replace(/[^0-9a-f]/gi,'').toUpperCase().slice(0,6);if(event.currentTarget.value.length===6)setFromHex(event.currentTarget.value);});
   hexInput.addEventListener('blur',()=>{if(!setFromHex(hexInput.value)){hexInput.value=selectedHex.slice(1).toUpperCase();toast('Informe uma cor HEX com 6 caracteres.','error');}});
-  $$('[data-color-quick]').forEach(button=>button.addEventListener('click',()=>setFromHex(button.dataset.colorQuick)));
   $('#apply-accent-studio').addEventListener('click',async()=>{
     const accent=normalizeAccent(selectedHex);applyAccent(accent);state.user.accent_preference=accent;
     try{await saveAppearance({accent});closeModal();toast(`Cor ${accent.toUpperCase()} aplicada.`);renderAccount();}
@@ -2514,8 +2504,7 @@ async function renderAccount() {
             <button class="theme-card ${currentTheme()==='light'?'active':''}" data-theme-choice="light" type="button"><span>☀</span><strong>Claro</strong><small>Ambientes iluminados</small></button>
           </div></div>
           <div class="appearance-group"><div class="appearance-group-head"><strong>Cor de destaque</strong><small>Menus, botões e foco · o fundo permanece obsidiana</small></div>
-            <div class="accent-choice" role="group" aria-label="Cor de destaque">${Object.entries(accentPresets).map(([code,item])=>`<button type="button" class="accent-swatch ${currentAccent()===code?'active':''}" data-accent-choice="${code}" title="${esc(item.label)}" aria-label="${esc(item.label)}"><i style="--swatch:${item.hex}"></i><span>${esc(item.label)}</span></button>`).join('')}</div>
-            <button class="custom-accent-row" id="open-accent-studio" type="button" aria-label="Abrir editor avançado de cor"><i class="current-accent-preview" style="--current-accent:${esc(accentHex())}"></i><span><strong>Cor personalizada</strong><small>${esc(accentHex().toUpperCase())} · editor avançado</small></span><b>Personalizar</b></button>
+            <button class="custom-accent-row" id="open-accent-studio" type="button" aria-label="Personalizar cor de destaque"><i class="current-accent-preview" style="--current-accent:${esc(accentHex())}"></i><span><strong>Personalizar cor</strong><small>${esc(accentHex().toUpperCase())} · escolha livremente qualquer cor</small></span><b>Personalizar</b></button>
           </div>
         </div></section>
         <section class="panel"><header class="panel-head"><h3>Dados de acesso</h3></header><div class="panel-body"><div class="metric-row"><span>Cargo</span><strong>${esc(u.role_name||roleLabel(u.role_code))}</strong></div><div class="metric-row"><span>Equipe</span><strong>${esc(u.team_name||'-')}</strong></div><div class="metric-row"><span>Permissões</span><strong>${u.permissions.length}</strong></div></div></section>
@@ -2542,12 +2531,6 @@ async function renderAccount() {
     const theme=button.dataset.themeChoice;
     applyTheme(theme);state.user.theme_preference=theme;
     try{await saveAppearance({theme});toast(`Tema ${theme==='light'?'claro':'escuro'} aplicado.`);renderAccount();}
-    catch(error){toast(error.message,'error');}
-  }));
-  $$('[data-accent-choice]').forEach(button=>button.addEventListener('click',async()=>{
-    const accent=button.dataset.accentChoice;
-    applyAccent(accent);state.user.accent_preference=accent;
-    try{await saveAppearance({accent});toast(`Destaque ${accentPresets[accent]?.label||accent} aplicado.`);renderAccount();}
     catch(error){toast(error.message,'error');}
   }));
   $('#open-accent-studio')?.addEventListener('click',openAccentColorStudio);

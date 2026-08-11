@@ -40,7 +40,7 @@ from one_crm_ai import (
 )
 
 APP_NAME = "ONE CRM"
-APP_VERSION = "2.7.1-beta.1"
+APP_VERSION = "2.7.2-beta.1"
 BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
 
@@ -480,7 +480,7 @@ def init_database() -> None:
         phone TEXT,
         bio TEXT,
         theme_preference TEXT NOT NULL DEFAULT 'dark' CHECK(theme_preference IN ('dark','light')),
-        accent_preference TEXT NOT NULL DEFAULT 'emerald',
+        accent_preference TEXT NOT NULL DEFAULT '#55e69d',
         background_preference TEXT NOT NULL DEFAULT 'obsidian',
         password_hash TEXT NOT NULL,
         role_code TEXT NOT NULL CHECK(role_code IN ('owner','manager','bko','seller')),
@@ -690,7 +690,7 @@ def init_database() -> None:
             "phone": "ALTER TABLE users ADD COLUMN phone TEXT",
             "bio": "ALTER TABLE users ADD COLUMN bio TEXT",
             "theme_preference": "ALTER TABLE users ADD COLUMN theme_preference TEXT NOT NULL DEFAULT 'dark'",
-            "accent_preference": "ALTER TABLE users ADD COLUMN accent_preference TEXT NOT NULL DEFAULT 'emerald'",
+            "accent_preference": "ALTER TABLE users ADD COLUMN accent_preference TEXT NOT NULL DEFAULT '#55e69d'",
             "background_preference": "ALTER TABLE users ADD COLUMN background_preference TEXT NOT NULL DEFAULT 'obsidian'",
             "custom_role_code": "ALTER TABLE users ADD COLUMN custom_role_code TEXT",
         }
@@ -699,6 +699,10 @@ def init_database() -> None:
                 conn.execute(statement)
         # ONE CRM 2.7.1: o modo escuro usa um único fundo canônico.
         conn.execute("UPDATE users SET background_preference='obsidian' WHERE background_preference IS NULL OR background_preference<>'obsidian'")
+        # ONE CRM 2.7.2: presets de destaque foram aposentados; preferências antigas viram HEX.
+        for legacy_accent, hex_accent in {"emerald": "#55e69d", "cyan": "#48dfe5", "blue": "#62a8ff", "violet": "#a983ff", "rose": "#ff72ad", "amber": "#f0b95d"}.items():
+            conn.execute("UPDATE users SET accent_preference=? WHERE lower(accent_preference)=?", (hex_accent, legacy_accent))
+        conn.execute("UPDATE users SET accent_preference='#55e69d' WHERE accent_preference IS NULL OR trim(accent_preference)='' ")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_users_custom_role ON users(custom_role_code)")
         ai_columns = {row[1] for row in conn.execute("PRAGMA table_info(ai_usage_logs)").fetchall()}
         if "provider" not in ai_columns:
@@ -1515,7 +1519,7 @@ class OneCRMHandler(BaseHTTPRequestHandler):
             "email": user["email"], "phone": user.get("phone") or "",
             "bio": user.get("bio") or "",
             "theme_preference": user.get("theme_preference") or "dark",
-            "accent_preference": user.get("accent_preference") or "emerald",
+            "accent_preference": user.get("accent_preference") or "#55e69d",
             "background_preference": "obsidian",
             "role_code": effective,
             "base_role": user["role_code"],
@@ -2528,13 +2532,14 @@ class OneCRMHandler(BaseHTTPRequestHandler):
     def api_appearance_update(self, user: dict[str, Any]) -> None:
         data = self.read_json()
         theme = (data.get("theme") or user.get("theme_preference") or "dark").strip().lower()
-        accent = (data.get("accent") or user.get("accent_preference") or "emerald").strip().lower()
+        accent_raw = (data.get("accent") or user.get("accent_preference") or "#55e69d").strip().lower()
+        legacy_accents = {"emerald": "#55e69d", "cyan": "#48dfe5", "blue": "#62a8ff", "violet": "#a983ff", "rose": "#ff72ad", "amber": "#f0b95d"}
+        accent = legacy_accents.get(accent_raw, accent_raw)
         background = "obsidian"
-        accent_presets = {"emerald", "cyan", "blue", "violet", "rose", "amber"}
         if theme not in {"dark", "light"}:
             raise ApiError(400, "Tema inválido.")
-        if accent not in accent_presets and not re.fullmatch(r"#[0-9a-f]{6}", accent):
-            raise ApiError(400, "Cor de destaque inválida.")
+        if not re.fullmatch(r"#[0-9a-f]{6}", accent):
+            raise ApiError(400, "Cor de destaque inválida. Use uma cor HEX com 6 dígitos.")
         with db_connect() as conn:
             conn.execute(
                 "UPDATE users SET theme_preference=?,accent_preference=?,background_preference=?,updated_at=? WHERE id=?",

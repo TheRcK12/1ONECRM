@@ -2476,7 +2476,7 @@ def install_profiles(ns: dict[str, Any]) -> None:
             "phone": user.get("phone") or "",
             "bio": user.get("bio") or "",
             "theme_preference": user.get("theme_preference") or "dark",
-            "accent_preference": user.get("accent_preference") or "emerald",
+            "accent_preference": user.get("accent_preference") or "#55e69d",
             "background_preference": "obsidian",
             "role_code": user.get("effective_role_code") or user.get("role_code"),
             "base_role": user.get("role_code"),

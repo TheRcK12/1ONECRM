@@ -17,5 +17,5 @@ for old in ('data-background="graphite"', 'data-background="midnight"', 'data-ba
     assert old not in css, f"Preset antigo de fundo ainda presente: {old}"
 assert 'background = "obsidian"' in server
 assert "UPDATE users SET background_preference='obsidian'" in server
-assert "obsidian" not in app.split("const accentPresets = {", 1)[1].split("};", 1)[0].lower(), "Obsidiana não pode virar cor de destaque"
 print("Dark background Obsidian: OK")
+assert 'obsidian' not in app.split("const LEGACY_ACCENTS = {", 1)[1].split("};", 1)[0].lower(), "Obsidiana não pode virar cor de destaque"

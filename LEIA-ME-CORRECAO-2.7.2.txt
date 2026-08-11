@@ -1,0 +1,10 @@
+ONE CRM 2.7.2-beta.1
+
+ALTERAÇÃO VISUAL
+- Removidos os presets Verde neon, Ciano, Azul elétrico, Roxo, Rosa e Âmbar da tela Aparência.
+- Ficou somente a opção Personalizar cor.
+- O editor não possui mais Cores rápidas; a escolha é livre pelo painel de cor ou valor HEX.
+- Usuários antigos têm as cores salvas convertidas automaticamente para HEX.
+- O tema escuro permanece com fundo Obsidiana fixo.
+
+Para Railway/GitHub, substitua os arquivos do pacote ARQUIVOS_PARA_COMMIT mantendo a mesma estrutura de pastas.

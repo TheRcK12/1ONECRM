@@ -5,6 +5,11 @@ css = (ROOT / 'static' / 'app.css').read_text(encoding='utf-8')
 assert 'type="color"' not in app, 'Seletor nativo de cor ainda presente no app.js'
 for token in ['openAccentColorStudio', 'color-sv-board', 'color-hue-track', 'color-hex-input', 'apply-accent-studio']:
     assert token in app, f'Elemento do editor ausente: {token}'
-for token in ['.color-studio', '.color-sv-board', '.color-hue-track', '.color-quick-list']:
+for token in ['.color-studio', '.color-sv-board', '.color-hue-track']:
     assert token in css, f'Estilo do editor ausente: {token}'
 print('Color Studio Test: OK')
+
+assert 'Cores rápidas' not in app
+assert 'data-color-quick' not in app
+assert '.color-quick-list' not in css
+print('Custom-only Accent Test: OK')

@@ -1,3 +1,11 @@
+## 2.7.2-beta.1
+- Removidos os seis presets visuais de cor de destaque da tela de Aparência.
+- A personalização de destaque agora possui uma única entrada: **Personalizar cor**.
+- Removidas também as "Cores rápidas" do editor para manter a escolha realmente livre, sem presets disfarçados.
+- Preferências antigas (emerald/cyan/blue/violet/rose/amber) são migradas automaticamente para seus valores HEX equivalentes.
+- A API de aparência persiste o destaque em HEX; o fundo do tema escuro continua fixo em Obsidiana.
+- Cache dos assets atualizado para 2.7.2.
+
 ## 2.7.1-beta.1
 
 ### Aparência

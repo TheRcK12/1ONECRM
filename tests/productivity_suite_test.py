@@ -19,7 +19,7 @@ with tempfile.TemporaryDirectory() as td:
         required={'account_tokens','tasks','notifications','automation_rules','custom_forms','custom_form_entries','attachments','dashboard_views','security_alerts'}
         assert required <= tables, required-tables
         with urllib.request.urlopen('http://127.0.0.1:18991/api/bootstrap') as r:
-            payload=json.load(r); assert payload['version']=='2.7.1-beta.1'
+            payload=json.load(r); assert payload['version']=='2.7.2-beta.1'
         print('PRODUCTIVITY SUITE TEST: OK')
     finally:
         proc.terminate(); proc.wait(timeout=10)

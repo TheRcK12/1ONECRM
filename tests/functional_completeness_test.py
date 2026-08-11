@@ -31,7 +31,7 @@ checks = {
     'http delete support': 'def do_DELETE(self)' in SERVER,
     'body supports 5MB base64': 'MAX_BODY = 8 * 1024 * 1024' in SERVER,
     'failed login commit fix': 'o erro é levantado somente depois' in SERVER.lower(),
-    'asset cache version': 'v=2.7.1' in INDEX,
+    'asset cache version': 'v=2.7.2' in INDEX,
 }
 
 failed = [name for name, ok in checks.items() if not ok]

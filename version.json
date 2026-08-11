@@ -1,6 +1,6 @@
 {
   "name": "ONE CRM",
-  "version": "2.7.1-beta.1",
+  "version": "2.7.2-beta.1",
   "channel": "beta-online",
-  "description": "Tema escuro fixado em Obsidiana; personalização de destaque preservada sem alterar o fundo."
+  "description": "Destaque visual somente por cor personalizada HEX; presets removidos e fundo escuro mantido em Obsidiana."
 }
